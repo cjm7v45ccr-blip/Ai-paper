@@ -19,43 +19,46 @@ function cleanJson(raw: string): string {
   return cleaned;
 }
 
-const AI_CREATION_SYSTEM_PROMPT = `You are PagePilot, an elite AI presentation and document builder inspired by the minimalist craft of Apple and the intelligent structuring of Gamma.
-Your job is to generate real, publication-grade structured content and layout data based on the user's prompt.
+const AI_CREATION_SYSTEM_PROMPT = `You are PagePilot, an elite hybrid document and presentation AI builder.
+You combine the flexibility and continuous flow of a Google Docs-style document editor with the high aesthetic craft of an AI presentation tool.
+All pages are strictly formatted for standard US Letter (8.5 inches wide by 11 inches tall, portrait orientation).
 
 You must return strictly valid JSON matching this exact schema:
 {
   "title": "String (engaging, professional title for the project)",
-  "message": "String (1-2 sentences summarizing the generated content and focus areas)",
+  "message": "String (1-2 sentences summarizing the generated content and structure)",
   "pages": [
     {
       "id": "page-1",
-      "title": "String (e.g. Executive Overview, Problem Statement, Solution Architecture, Market Opportunity)",
+      "title": "String (e.g. Executive Summary, Technical Architecture, Empirical Results)",
       "elements": [
         {
           "id": "heading-1",
           "type": "heading",
-          "x": 0.8,
-          "y": 0.8,
-          "width": 10,
-          "height": 1.2,
+          "layoutMode": "flow",
+          "x": 0.65,
+          "y": 0.65,
+          "width": 7.2,
+          "height": 1.0,
           "zIndex": 1,
           "content": {
-            "title": "Clear Slide/Section Headline",
-            "subtitle": "Informative 1-2 sentence narrative explanation.",
+            "title": "Clear Section Headline",
+            "subtitle": "Informative 1-2 sentence narrative context.",
             "badge": "OPTIONAL CATEGORY"
           }
         },
         {
           "id": "card-1",
           "type": "callout",
-          "x": 0.8,
-          "y": 2.2,
-          "width": 5.5,
-          "height": 2.0,
+          "layoutMode": "flow",
+          "x": 0.65,
+          "y": 1.8,
+          "width": 7.2,
+          "height": 1.5,
           "zIndex": 2,
           "content": {
-            "title": "Specific Card Heading",
-            "text": "Detailed, high-quality, factual insight directly related to the user's topic."
+            "title": "Key Insight Callout",
+            "text": "Detailed, high-quality, factual content directly tailored to the topic."
           }
         }
       ]
@@ -63,20 +66,23 @@ You must return strictly valid JSON matching this exact schema:
   ]
 }
 
-Supported element types for pages:
-- "heading": content has "title", "subtitle", "badge"
-- "callout": content has "title", "text"
-- "text": content has "title", "text"
-- "formula": content has "title", "equation" (standard LaTeX KaTeX formula string e.g. "E = mc^2"), "breakdown" (array of { "symbol": "...", "label": "..." })
-- "table": content has "title", "headers" (array of column header strings), "rows" (array of string arrays)
-- "chart": content has "title", "data" (array of { "label": "...", "value": number })
-- "checkboxGroup": content has "title", "items" (array of { "text": "...", "checked": boolean })
+Supported element types:
+- "heading": content has "title", "subtitle", "badge". layoutMode: "flow"
+- "callout": content has "title", "text" or "body". layoutMode: "flow" or "canvas"
+- "text": content has "title", "text". layoutMode: "flow"
+- "formula": content has "title", "equation" (valid KaTeX LaTeX math string e.g. "A = P(1 + r/n)^{nt}"), "breakdown" (array of { "symbol": "...", "label": "..." }). layoutMode: "flow" or "canvas"
+- "table": content has "title", "headers" (array of strings), "rows" (2D array of string cells). layoutMode: "flow"
+- "chart": content has "title", "series" (array of { name, color, values: number[] }), "labels" (array of strings). layoutMode: "flow" or "canvas"
+- "checkboxGroup": content has "title", "items" (array of { "text": string, "checked": boolean }). layoutMode: "flow"
+- "writingLines": content has "title", "promptText", "lineCount" (number). layoutMode: "flow"
 
-DESIGN RULES:
-- Never generate placeholders or generic lorem ipsum text. Write real, deeply relevant, intelligent content for the specific topic requested.
-- Generate 3 to 4 complete pages/slides for presentations or 2 to 3 sections for documents.
-- Each page MUST start with 1 "heading" element, followed by 2 to 4 distinct body elements (mix of callouts, tables, formulas, checklists, or charts to keep layouts visually engaging).
-- Keep content concise, high-signal, and executive-ready.`;
+PAGE DIMENSIONS & MARGIN CONSTRAINTS:
+- Page Width: 8.5 inches
+- Page Height: 11.0 inches (US Letter Portrait)
+- Safe Margins: 0.65 inches (leaving 7.2 inches of printable content width: 8.5 - 2*0.65 = 7.2)
+- Flow elements must have width: 7.2 and x: 0.65.
+- Canvas visual blocks can be side-by-side (e.g. two 3.5-inch cards with x: 0.65 and x: 4.35).
+- Content on any single page must fit within 11 inches height. Distribute across 2 to 4 pages if needed.`;
 
 export async function POST(req: NextRequest) {
   try {
@@ -122,14 +128,15 @@ export async function POST(req: NextRequest) {
         // Ensure each page and element has valid layout IDs and default styling
         const sanitizedPages: PageData[] = parsed.pages.map((p: any, pIdx: number) => ({
           id: p.id || `page-${pIdx + 1}`,
-          title: p.title || `Slide ${pIdx + 1}`,
+          title: p.title || `Section ${pIdx + 1}`,
           elements: (p.elements || []).map((el: any, elIdx: number) => ({
             id: el.id || `elem-${pIdx + 1}-${elIdx + 1}`,
             type: el.type || "text",
-            x: typeof el.x === "number" ? el.x : 0.8,
-            y: typeof el.y === "number" ? el.y : 1.5 + elIdx * 1.5,
-            width: typeof el.width === "number" ? el.width : 5.5,
-            height: typeof el.height === "number" ? el.height : 2.0,
+            layoutMode: el.layoutMode || (el.width && el.width < 6.0 ? "canvas" : "flow"),
+            x: typeof el.x === "number" ? el.x : 0.65,
+            y: typeof el.y === "number" ? el.y : 0.65 + elIdx * 1.8,
+            width: typeof el.width === "number" ? Math.min(el.width, 7.2) : 7.2,
+            height: typeof el.height === "number" ? el.height : 1.8,
             zIndex: el.zIndex || elIdx + 1,
             content: el.content || {},
             style: el.style || {},
@@ -144,20 +151,20 @@ export async function POST(req: NextRequest) {
           pages: sanitizedPages,
           elements: sanitizedPages[0]?.elements || [],
           page: {
-            size: documentMode === "presentation" ? "presentation-16-9" : "letter",
-            width: documentMode === "presentation" ? 13.333 : 8.5,
-            height: documentMode === "presentation" ? 7.5 : 11.0,
+            size: "letter",
+            width: 8.5,
+            height: 11.0,
             unit: "in",
-            safeMargin: 0.45,
-            background: "#11131a",
+            safeMargin: 0.65,
+            background: "#ffffff",
           },
           theme: {
-            name: "Titanium Slate",
-            headingFont: "Inter Display",
+            name: "Editorial Serif",
+            headingFont: "Playfair Display",
             bodyFont: "Inter",
-            primaryColor: "#6366f1",
-            accentColor: "#10b981",
-            backgroundColor: "#11131a",
+            primaryColor: "#0f172a",
+            accentColor: "#3b82f6",
+            backgroundColor: "#ffffff",
           },
         };
 

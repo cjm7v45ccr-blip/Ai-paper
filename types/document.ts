@@ -1,4 +1,11 @@
-export type DocumentMode = "document" | "presentation" | "worksheet" | "one-pager";
+export type DocumentMode =
+  | "document"
+  | "presentation"
+  | "worksheet"
+  | "report"
+  | "research"
+  | "proposal"
+  | "one-pager";
 
 export type ElementType =
   | "text"
@@ -23,7 +30,10 @@ export type ElementType =
   | "drawingArea"
   | "imagePlaceholder"
   | "checkboxGroup"
-  | "group";
+  | "group"
+  | "card"
+  | "metric"
+  | "pageBreak";
 
 export interface ElementStyle {
   color?: string;
@@ -45,10 +55,16 @@ export interface ElementStyle {
 export interface DocumentElement {
   id: string;
   type: ElementType;
-  x: number; // inches
-  y: number; // inches
+  layoutMode?: "flow" | "canvas"; // flow = natural document stacking; canvas = freeform absolute positioning
+  x: number; // inches (used when layoutMode === 'canvas')
+  y: number; // inches (used when layoutMode === 'canvas')
   width: number; // inches
   height: number; // inches
+  minWidth?: number; // inches
+  minHeight?: number; // inches
+  margin?: number; // inches
+  padding?: number; // inches
+  parentSectionId?: string;
   rotation?: number; // degrees
   zIndex: number;
   locked?: boolean;
@@ -74,15 +90,18 @@ export interface PageData {
   title?: string;
   elements: DocumentElement[];
   background?: string;
+  isOverflowing?: boolean;
+  computedHeightInches?: number;
 }
 
 export interface DocumentPage {
   size: "letter" | "a4" | "presentation-16-9" | "custom";
-  width: number; // 8.5 for letter, 13.33 for 16:9 presentation
-  height: number; // 11 for letter, 7.5 for 16:9 presentation
+  width: number; // 8.5 for US Letter
+  height: number; // 11.0 for US Letter
   unit: "in";
-  safeMargin: number; // 0.45 or 0.35
+  safeMargin: number; // 0.65 inches default print-safe margin
   background: string;
+  orientation?: "portrait" | "landscape";
 }
 
 export interface DocumentTheme {
@@ -115,7 +134,9 @@ export type Operation =
   | { action: "replace"; elements: DocumentElement[]; pageIndex?: number }
   | { action: "addPage"; page: PageData }
   | { action: "deletePage"; pageIndex: number }
-  | { action: "switchMode"; mode: DocumentMode };
+  | { action: "switchMode"; mode: DocumentMode }
+  | { action: "switchElementMode"; id: string; layoutMode: "flow" | "canvas"; pageIndex?: number }
+  | { action: "paginate"; pageIndex?: number };
 
 export interface QualityCheckIssue {
   severity: "error" | "warning" | "info";

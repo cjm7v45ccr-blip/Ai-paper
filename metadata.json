@@ -1,6 +1,6 @@
 {
   "name": "PagePilot",
-  "description": "Professional AI document & slide creation workspace with KaTeX math and layout intelligence",
+  "description": "Hybrid workspace combining the flexibility of a document editor with the visual quality of an AI presentation tool on 8.5x11 inch pages.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

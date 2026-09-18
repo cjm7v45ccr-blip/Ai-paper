@@ -1,12 +1,23 @@
 /**
  * Coordinate math, boundary clamping, and alignment guide system for PagePilot.
- * Strict US Letter 8.5 x 11 inches specification.
+ * Strict US Letter 8.5 x 11 inches specification (Portrait) with 0.65 in margins.
  */
 
+export const PAGE_WIDTH_IN = 8.5;
+export const PAGE_HEIGHT_IN = 11;
+export const PAGE_MARGIN_IN = 0.65;
 export const DPI = 96; // 96 CSS pixels per inch
-export const PAGE_WIDTH_INCHES = 8.5;
-export const PAGE_HEIGHT_INCHES = 11.0;
-export const SAFE_MARGIN_INCHES = 0.45;
+
+export const PAGE_WIDTH = PAGE_WIDTH_IN * DPI; // 816px
+export const PAGE_HEIGHT = PAGE_HEIGHT_IN * DPI; // 1056px
+export const PAGE_MARGIN = PAGE_MARGIN_IN * DPI; // 62.4px
+export const PAGE_CONTENT_WIDTH = (PAGE_WIDTH_IN - PAGE_MARGIN_IN * 2) * DPI; // 691.2px
+export const PAGE_CONTENT_HEIGHT = (PAGE_HEIGHT_IN - PAGE_MARGIN_IN * 2) * DPI; // 931.2px
+
+// Backward compatibility aliases
+export const PAGE_WIDTH_INCHES = PAGE_WIDTH_IN;
+export const PAGE_HEIGHT_INCHES = PAGE_HEIGHT_IN;
+export const SAFE_MARGIN_INCHES = PAGE_MARGIN_IN;
 export const MIN_ELEMENT_WIDTH = 0.5; // in inches
 export const MIN_ELEMENT_HEIGHT = 0.3; // in inches
 export const DEFAULT_SNAP_GRID = 0.05; // 0.05" increments (~4.8px)

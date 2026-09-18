@@ -34,6 +34,10 @@ interface MinimalTopNavProps {
   onOpenPresenter: () => void;
   onBackToHome: () => void;
   onExport: (format: "pdf" | "png" | "json" | "markdown") => void;
+  zoom?: number;
+  onUpdateZoom?: (newZoom: number) => void;
+  viewMode?: "stacked" | "single";
+  onToggleViewMode?: () => void;
 }
 
 export const MinimalTopNav: React.FC<MinimalTopNavProps> = ({
@@ -50,13 +54,21 @@ export const MinimalTopNav: React.FC<MinimalTopNavProps> = ({
   onOpenPresenter,
   onBackToHome,
   onExport,
+  zoom = 1.0,
+  onUpdateZoom,
+  viewMode = "stacked",
+  onToggleViewMode,
 }) => {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [localTitle, setLocalTitle] = useState(title);
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [isShareOpen, setIsShareOpen] = useState(false);
+  const [isZoomMenuOpen, setIsZoomMenuOpen] = useState(false);
+  const [isModeMenuOpen, setIsModeMenuOpen] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const exportRef = useRef<HTMLDivElement>(null);
+  const zoomRef = useRef<HTMLDivElement>(null);
+  const modeRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setLocalTitle(title);
@@ -66,6 +78,12 @@ export const MinimalTopNav: React.FC<MinimalTopNavProps> = ({
     const handleClickOutside = (e: MouseEvent) => {
       if (exportRef.current && !exportRef.current.contains(e.target as Node)) {
         setIsExportOpen(false);
+      }
+      if (zoomRef.current && !zoomRef.current.contains(e.target as Node)) {
+        setIsZoomMenuOpen(false);
+      }
+      if (modeRef.current && !modeRef.current.contains(e.target as Node)) {
+        setIsModeMenuOpen(false);
       }
     };
     window.addEventListener("mousedown", handleClickOutside);
@@ -123,25 +141,112 @@ export const MinimalTopNav: React.FC<MinimalTopNavProps> = ({
           </button>
         )}
 
-        {/* Format Pill Badge */}
-        <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-white/[0.05] border border-white/[0.08] text-[11px] font-mono text-zinc-400">
-          {documentMode === "presentation" ? (
-            <Presentation className="w-3 h-3 text-indigo-400" />
-          ) : (
-            <FileText className="w-3 h-3 text-emerald-400" />
+        {/* Format Pill Badge & Mode Selector */}
+        <div className="relative" ref={modeRef}>
+          <button
+            onClick={() => setIsModeMenuOpen(!isModeMenuOpen)}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.08] text-[11px] font-medium text-zinc-300 transition-colors"
+          >
+            <span className="w-2 h-2 rounded-full bg-indigo-400 shrink-0" />
+            <span className="capitalize">{documentMode.replace("-", " ")}</span>
+            <ChevronDown className="w-3 h-3 text-zinc-400" />
+          </button>
+
+          {isModeMenuOpen && (
+            <div className="absolute left-0 mt-2 w-52 bg-[#161822] border border-white/[0.12] rounded-xl p-1.5 shadow-2xl z-50 animate-in fade-in-50 zoom-in-95 text-xs text-left">
+              <div className="px-2 py-1 text-[10px] font-mono text-zinc-500 uppercase">
+                Document Formats
+              </div>
+              {[
+                { id: "document", label: "Standard Document", desc: "Structured flow & narrative" },
+                { id: "report", label: "Executive Report", desc: "Multi-page metrics & tables" },
+                { id: "presentation", label: "Visual Presentation", desc: "Portrait presentation deck" },
+                { id: "research", label: "Research Brief", desc: "Equations, methodology, citations" },
+                { id: "worksheet", label: "Interactive Worksheet", desc: "Checklists & practice areas" },
+                { id: "one-pager", label: "Visual One-Pager", desc: "Bento visual summary" },
+              ].map((m) => (
+                <button
+                  key={m.id}
+                  onClick={() => {
+                    onChangeMode(m.id as DocumentMode);
+                    setIsModeMenuOpen(false);
+                  }}
+                  className={`w-full text-left px-2 py-1.5 rounded-lg flex flex-col transition-colors ${
+                    documentMode === m.id
+                      ? "bg-indigo-600/20 text-indigo-300 font-medium"
+                      : "hover:bg-white/[0.06] text-zinc-300"
+                  }`}
+                >
+                  <span className="text-xs">{m.label}</span>
+                  <span className="text-[10px] text-zinc-500 truncate">{m.desc}</span>
+                </button>
+              ))}
+            </div>
           )}
-          <span className="capitalize">{documentMode === "presentation" ? "16:9 Deck" : "Document"}</span>
         </div>
 
         {/* Subtle Auto-Save Indicator */}
         <div className="hidden md:flex items-center gap-1 text-[11px] text-zinc-500 font-mono">
-          <Check className="w-3 h-3 text-zinc-500" />
-          <span>Saved</span>
+          <Check className="w-3 h-3 text-emerald-500" />
+          <span>8.5×11" Letter</span>
         </div>
       </div>
 
-      {/* Right Section: Undo/Redo, Add, Regenerate, Present, Share, Export */}
+      {/* Right Section: Zoom, View, Undo/Redo, Add, Regenerate, Present, Share, Export */}
       <div className="flex items-center gap-1.5 sm:gap-2">
+        {/* Zoom Selector */}
+        {onUpdateZoom && (
+          <div className="relative" ref={zoomRef}>
+            <button
+              onClick={() => setIsZoomMenuOpen(!isZoomMenuOpen)}
+              className="flex items-center gap-1 px-2 py-1 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-[11px] font-mono text-zinc-300 transition-colors"
+              title="Change Zoom"
+            >
+              <span>{Math.round(zoom * 100)}%</span>
+              <ChevronDown className="w-3 h-3 text-zinc-400" />
+            </button>
+
+            {isZoomMenuOpen && (
+              <div className="absolute right-0 mt-2 w-32 bg-[#161822] border border-white/[0.12] rounded-xl p-1 shadow-2xl z-50 text-xs font-mono">
+                {[
+                  { label: "50%", val: 0.5 },
+                  { label: "75%", val: 0.75 },
+                  { label: "100%", val: 1.0 },
+                  { label: "125%", val: 1.25 },
+                ].map((z) => (
+                  <button
+                    key={z.label}
+                    onClick={() => {
+                      onUpdateZoom(z.val);
+                      setIsZoomMenuOpen(false);
+                    }}
+                    className={`w-full text-left px-2 py-1 rounded-md transition-colors ${
+                      Math.abs(zoom - z.val) < 0.05
+                        ? "bg-indigo-600 text-white"
+                        : "text-zinc-300 hover:bg-white/[0.06]"
+                    }`}
+                  >
+                    {z.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* View Mode (Stacked vs Single) */}
+        {onToggleViewMode && (
+          <button
+            onClick={onToggleViewMode}
+            className="p-1.5 sm:px-2 sm:py-1 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-zinc-400 hover:text-white text-xs font-medium transition-colors"
+            title={viewMode === "stacked" ? "Switch to single page view" : "Switch to continuous stacked view"}
+          >
+            <span className="hidden sm:inline text-[11px]">
+              {viewMode === "stacked" ? "Stacked" : "Single"}
+            </span>
+          </button>
+        )}
+
         {/* Undo / Redo */}
         <div className="flex items-center bg-white/[0.04] border border-white/[0.06] rounded-lg p-0.5">
           <button

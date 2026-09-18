@@ -12,6 +12,12 @@ import {
   SAMPLE_PRESENTATION_DECK,
 } from "@/lib/sample-document";
 import { buildComprehensiveDocumentFromPrompt } from "@/lib/smart-layout-architect";
+import {
+  turnPageIntoVisual,
+  turnPageIntoDocumentFlow,
+  balancePageLayout,
+  autoPaginateDocument,
+} from "@/lib/layout-engine";
 import { triggerPrint } from "@/lib/print";
 import { Sparkles } from "lucide-react";
 
@@ -19,7 +25,8 @@ import { GammaStyleHomepage } from "@/components/home/GammaStyleHomepage";
 import { GenerationSteppedScreen } from "@/components/home/GenerationSteppedScreen";
 import { MinimalTopNav } from "@/components/editor/MinimalTopNav";
 import { MinimalLeftRail } from "@/components/editor/MinimalLeftRail";
-import { AdaptiveContentCanvas } from "@/components/editor/AdaptiveContentCanvas";
+import { HybridDocumentCanvas } from "@/components/editor/HybridDocumentCanvas";
+import { RightInspector } from "@/components/editor/RightInspector";
 import { MinimalAiPromptBar } from "@/components/editor/MinimalAiPromptBar";
 import { PresenterModal } from "@/components/editor/PresenterModal";
 import { PrintPreviewModal } from "@/components/editor/PrintPreviewModal";
@@ -28,14 +35,20 @@ export default function PagePilotApp() {
   // Navigation views: "home" | "generating" | "editor"
   const [currentView, setCurrentView] = useState<"home" | "generating" | "editor">("home");
 
-  // Active Document State
-  const [documentState, setDocumentState] = useState<DocumentModel>(SAMPLE_PRESENTATION_DECK);
-  const [documentMode, setDocumentMode] = useState<DocumentMode>("presentation");
+  // Active Document State - Defaults to standard 8.5x11 inch US Letter Hybrid Document
+  const [documentState, setDocumentState] = useState<DocumentModel>(INITIAL_SAMPLE_DOCUMENT);
+  const [documentMode, setDocumentMode] = useState<DocumentMode>("document");
   const [activePageIndex, setActivePageIndex] = useState(0);
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
 
+  // Canvas View & Zoom State
+  const [zoom, setZoom] = useState(0.85);
+  const [viewMode, setViewMode] = useState<"stacked" | "single">("stacked");
+  const [showMargins, setShowMargins] = useState(true);
+  const [isBlackAndWhite, setIsBlackAndWhite] = useState(false);
+
   // Undo / Redo History Stack
-  const [history, setHistory] = useState<DocumentModel[]>([SAMPLE_PRESENTATION_DECK]);
+  const [history, setHistory] = useState<DocumentModel[]>([INITIAL_SAMPLE_DOCUMENT]);
   const [historyIndex, setHistoryIndex] = useState(0);
 
   // AI & Generation States
@@ -282,7 +295,113 @@ export default function PagePilotApp() {
     setActivePageIndex(toIdx);
   };
 
-  // 4. Element Manipulation on Active Page
+  // 4. Element Manipulation & Positioning
+  const handleUpdateElementPosition = (
+    id: string,
+    x: number,
+    y: number,
+    pageIdx: number = activePageIndex
+  ) => {
+    const updatedPages = [...currentPages];
+    const page = updatedPages[pageIdx] || updatedPages[activePageIndex];
+    if (!page) return;
+
+    page.elements = page.elements.map((el) =>
+      el.id === id ? { ...el, x, y } : el
+    );
+
+    pushToHistory({
+      ...documentState,
+      pages: updatedPages,
+      elements: updatedPages[0]?.elements || [],
+    });
+  };
+
+  const handleUpdateElementDimensions = (
+    id: string,
+    width: number,
+    height: number,
+    x?: number,
+    y?: number,
+    pageIdx: number = activePageIndex
+  ) => {
+    const updatedPages = [...currentPages];
+    const page = updatedPages[pageIdx] || updatedPages[activePageIndex];
+    if (!page) return;
+
+    page.elements = page.elements.map((el) => {
+      if (el.id === id) {
+        return {
+          ...el,
+          width,
+          height,
+          ...(x !== undefined ? { x } : {}),
+          ...(y !== undefined ? { y } : {}),
+        };
+      }
+      return el;
+    });
+
+    pushToHistory({
+      ...documentState,
+      pages: updatedPages,
+      elements: updatedPages[0]?.elements || [],
+    });
+  };
+
+  const handleUpdateElement = (id: string, changes: Partial<DocumentElement>) => {
+    const updatedPages = [...currentPages];
+    let found = false;
+    for (let pIdx = 0; pIdx < updatedPages.length; pIdx++) {
+      const page = updatedPages[pIdx];
+      const elIdx = page.elements.findIndex((el) => el.id === id);
+      if (elIdx !== -1) {
+        page.elements[elIdx] = { ...page.elements[elIdx], ...changes };
+        found = true;
+        break;
+      }
+    }
+    if (found) {
+      pushToHistory({
+        ...documentState,
+        pages: updatedPages,
+        elements: updatedPages[0]?.elements || [],
+      });
+    }
+  };
+
+  const handleTransformPage = (action: "visual" | "flow" | "balance" | "paginate") => {
+    if (action === "paginate") {
+      const paginated = autoPaginateDocument(documentState);
+      pushToHistory(paginated);
+      setStatusMessage("Recalculated 8.5×11\" pagination across all pages.");
+      setTimeout(() => setStatusMessage(null), 3000);
+      return;
+    }
+
+    const updatedPages = [...currentPages];
+    const targetPage = updatedPages[activePageIndex] || updatedPages[0];
+    if (!targetPage) return;
+
+    if (action === "visual") {
+      updatedPages[activePageIndex] = turnPageIntoVisual(targetPage);
+      setStatusMessage("Transformed page into a high-density visual presentation layout.");
+    } else if (action === "flow") {
+      updatedPages[activePageIndex] = turnPageIntoDocumentFlow(targetPage);
+      setStatusMessage("Converted page elements to standard document flow.");
+    } else if (action === "balance") {
+      updatedPages[activePageIndex] = balancePageLayout(targetPage);
+      setStatusMessage("Balanced vertical distribution and reduced whitespace.");
+    }
+
+    pushToHistory({
+      ...documentState,
+      pages: updatedPages,
+      elements: updatedPages[0]?.elements || [],
+    });
+    setTimeout(() => setStatusMessage(null), 3000);
+  };
+
   const handleUpdateElementContent = (id: string, newContent: any) => {
     const updatedPages = [...currentPages];
     const page = updatedPages[activePageIndex];
@@ -627,6 +746,12 @@ export default function PagePilotApp() {
         onOpenPresenter={() => setIsPresenterOpen(true)}
         onBackToHome={() => setCurrentView("home")}
         onExport={handleExport}
+        zoom={zoom}
+        onUpdateZoom={setZoom}
+        viewMode={viewMode}
+        onToggleViewMode={() =>
+          setViewMode((prev) => (prev === "stacked" ? "single" : "stacked"))
+        }
       />
 
       {/* 2. Main Workspace Layout */}
@@ -646,13 +771,23 @@ export default function PagePilotApp() {
           documentMode={documentMode}
         />
 
-        {/* Central Intelligent Adaptive Canvas */}
-        <AdaptiveContentCanvas
+        {/* Central Intelligent Hybrid 8.5"x11" Document Canvas */}
+        <HybridDocumentCanvas
           document={documentState}
           documentMode={documentMode}
           activePageIndex={activePageIndex}
+          onSelectPageIndex={setActivePageIndex}
+          onAddPage={handleAddPage}
+          zoom={zoom}
+          onUpdateZoom={setZoom}
+          viewMode={viewMode}
+          onToggleViewMode={() =>
+            setViewMode((prev) => (prev === "stacked" ? "single" : "stacked"))
+          }
           selectedElementId={selectedElementId}
           onSelectElement={setSelectedElementId}
+          onUpdateElementPosition={handleUpdateElementPosition}
+          onUpdateElementDimensions={handleUpdateElementDimensions}
           onUpdateElementContent={handleUpdateElementContent}
           onUpdateElementStyle={handleUpdateElementStyle}
           onDuplicateElement={handleDuplicateElement}
@@ -660,7 +795,49 @@ export default function PagePilotApp() {
           onReorderElements={handleReorderElements}
           onAddBlock={handleAddBlock}
           onAiRefineElement={handleAiRefineElement}
+          onApplyDocumentUpdate={pushToHistory}
+          showMargins={showMargins}
+          onToggleMargins={() => setShowMargins((prev) => !prev)}
+          isBlackAndWhite={isBlackAndWhite}
           isAiLoading={isAiLoading}
+        />
+
+        {/* Right Properties & AI Intelligence Inspector */}
+        <RightInspector
+          document={documentState}
+          selectedElement={
+            currentPages[activePageIndex]?.elements.find((el) => el.id === selectedElementId) ||
+            currentPages.flatMap((p) => p.elements).find((el) => el.id === selectedElementId) ||
+            null
+          }
+          onUpdateElement={handleUpdateElement}
+          onDeleteElement={handleDeleteElement}
+          onDuplicateElement={handleDuplicateElement}
+          onReorderElement={(id, zIndex) => handleUpdateElement(id, { zIndex })}
+          onUpdateDocumentPage={(changes) => {
+            const updated = {
+              ...documentState,
+              page: { ...documentState.page, ...changes },
+            };
+            pushToHistory(updated);
+          }}
+          onUpdateDocumentTheme={(changes) => {
+            const updated = {
+              ...documentState,
+              theme: { ...documentState.theme, ...changes },
+            };
+            pushToHistory(updated);
+          }}
+          onModeChange={(newMode) => {
+            setDocumentMode(newMode);
+            pushToHistory({ ...documentState, mode: newMode });
+          }}
+          showMargins={showMargins}
+          onToggleMargins={() => setShowMargins((prev) => !prev)}
+          isBlackAndWhite={isBlackAndWhite}
+          onToggleBW={() => setIsBlackAndWhite((prev) => !prev)}
+          onTriggerAIModification={handleAiRefineElement}
+          onTransformPage={handleTransformPage}
         />
       </div>
 
@@ -691,8 +868,8 @@ export default function PagePilotApp() {
         isOpen={isPrintPreviewOpen}
         onClose={() => setIsPrintPreviewOpen(false)}
         documentModel={documentState}
-        isBlackAndWhite={false}
-        onToggleBW={() => {}}
+        isBlackAndWhite={isBlackAndWhite}
+        onToggleBW={() => setIsBlackAndWhite((prev) => !prev)}
       />
     </div>
   );
