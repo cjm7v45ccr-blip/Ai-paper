@@ -16,8 +16,8 @@ import {
   computeSnapAndGuides,
   AlignmentGuide,
 } from "@/lib/coordinates";
-import { RotateCw, Lock } from "lucide-react";
-import { GoogleDocsRuler } from "./GoogleDocsRuler";
+import { RotateCw, Lock, Copy, Trash2, AlignCenterHorizontal, Sparkles } from "lucide-react";
+import { StudioRuler } from "./StudioRuler";
 
 interface DocumentCanvasProps {
   document: DocumentModel;
@@ -427,9 +427,9 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = ({
         </div>
       )}
 
-      {/* Google Docs Authentic Horizontal Ruler */}
+      {/* Modern Studio Architectural Spatial Guide */}
       {!isPreviewMode && (
-        <GoogleDocsRuler
+        <StudioRuler
           pageWidthInches={pageWidth}
           safeMarginInches={safeMargin}
           zoom={zoom}
@@ -440,7 +440,7 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = ({
 
       {/* Page Canvas Container with Strict Aspect Ratio & Shadow */}
       <div
-        id="authoring-page-canvas"
+        id="studio-document-canvas"
         className={`print-only-page relative bg-white transition-all duration-200 ${
           isAnimating ? "animating-construction" : ""
         }`}
@@ -598,6 +598,44 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = ({
               {/* Selection Transform Controls (8-direction Resizing + Rotation Pin) */}
               {isSelected && !el.locked && (
                 <>
+                  {/* Contextual Quick-Action Capsule */}
+                  <div
+                    className="no-print absolute -top-9 left-0 flex items-center gap-1 bg-slate-900/95 text-white text-[10px] px-2 py-1 rounded-md shadow-xl border border-slate-700/80 z-50 select-none animate-in fade-in"
+                    onMouseDown={(e) => e.stopPropagation()}
+                  >
+                    <span className="font-mono text-indigo-400 font-bold uppercase text-[9px] mr-1">
+                      {el.type}
+                    </span>
+                    <button
+                      onClick={() => {
+                        const centeredX = Math.round(((pageWidth - el.width) / 2) * 100) / 100;
+                        onUpdateElementPosition(el.id, centeredX, el.y);
+                      }}
+                      title="Center on Page"
+                      className="p-1 hover:bg-slate-800 rounded text-slate-300 hover:text-white transition-colors"
+                    >
+                      <AlignCenterHorizontal className="w-3 h-3" />
+                    </button>
+                    {onDuplicateElement && (
+                      <button
+                        onClick={() => onDuplicateElement(el.id)}
+                        title="Duplicate Element"
+                        className="p-1 hover:bg-slate-800 rounded text-slate-300 hover:text-white transition-colors"
+                      >
+                        <Copy className="w-3 h-3" />
+                      </button>
+                    )}
+                    {onDeleteElement && (
+                      <button
+                        onClick={() => onDeleteElement(el.id)}
+                        title="Delete Element (Del)"
+                        className="p-1 hover:bg-rose-950 text-rose-400 hover:text-rose-200 rounded transition-colors"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+
                   {/* Rotation Handle with stem */}
                   <div
                     className="no-print absolute -top-7 left-1/2 -translate-x-1/2 flex flex-col items-center cursor-grab active:cursor-grabbing z-50"

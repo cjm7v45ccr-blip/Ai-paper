@@ -19,7 +19,7 @@ import {
 } from "@/lib/coordinates";
 import { buildChemistryMeasurementGuide, autoDesignDocument } from "@/lib/smart-layout-architect";
 
-import { CanvasToolbar } from "@/components/editor/CanvasToolbar";
+import { StudioHeader } from "@/components/editor/StudioHeader";
 import { LeftSidebar } from "@/components/editor/LeftSidebar";
 import { RightInspector } from "@/components/editor/RightInspector";
 import { DocumentCanvas } from "@/components/editor/DocumentCanvas";
@@ -780,9 +780,9 @@ export default function PagePilotEditor() {
     documentState.elements.find((el) => el.id === selectedElementId) || null;
 
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden bg-[#f3f4f6]">
-      {/* Top Application Toolbar */}
-      <CanvasToolbar
+    <div className="flex flex-col h-screen w-screen overflow-hidden bg-slate-950">
+      {/* Top Application Studio Header */}
+      <StudioHeader
         title={documentTitle}
         onTitleChange={setDocumentTitle}
         canUndo={historyIndex > 0}
@@ -823,13 +823,15 @@ export default function PagePilotEditor() {
               })
             }
             onApplyTemplate={handleApplyPreset}
+            onAutoDesign={handleAutoDesign}
+            designReasoning={designReasoning}
           />
         )}
 
         {/* Central Document Workspace Canvas */}
         <main
           ref={workspaceRef}
-          className="flex-1 overflow-auto relative bg-[#f3f4f6]"
+          className="flex-1 overflow-auto relative bg-slate-950/95 flex flex-col items-center py-6 px-4"
         >
           <DocumentCanvas
             document={documentState}
