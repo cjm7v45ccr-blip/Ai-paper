@@ -1,0 +1,6 @@
+{
+  "name": "PagePilot",
+  "description": "AI Visual Document Editor for creating polished, printable, editable 8.5x11 documents with Gemini",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

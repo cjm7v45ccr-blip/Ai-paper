@@ -1,0 +1,135 @@
+@import "tailwindcss/base";
+@import "tailwindcss/components";
+@import "tailwindcss/utilities";
+@import "katex/dist/katex.min.css";
+
+:root {
+  --canvas-dpi: 96;
+}
+
+body {
+  background-color: #f3f4f6;
+  color: #111827;
+  overflow: hidden;
+  user-select: none;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* Custom scrollbars for sidebars & workspace */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Signature Bottom-to-Top Progressive Construction Animation */
+@keyframes construct-upward {
+  0% {
+    clip-path: inset(100% 0 0 0);
+    filter: brightness(1.08) contrast(0.95);
+  }
+  70% {
+    clip-path: inset(0 0 0 0);
+    filter: brightness(1.02) contrast(0.98);
+  }
+  100% {
+    clip-path: inset(0 0 0 0);
+    filter: brightness(1) contrast(1);
+  }
+}
+
+.animating-construction {
+  animation: construct-upward 1.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Quality-Check Laser Beam Sweep */
+@keyframes qc-sweep {
+  0% {
+    top: -4px;
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    top: 100%;
+    opacity: 0;
+  }
+}
+
+.qc-beam-active {
+  animation: qc-sweep 1.2s ease-in-out forwards;
+}
+
+/* Vector Stroke Drawing */
+.path-draw {
+  stroke-dasharray: 1200;
+  stroke-dashoffset: 1200;
+  animation: stroke-draw 1.4s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+@keyframes stroke-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Reduced Motion Respect */
+@media (prefers-reduced-motion: reduce) {
+  .animating-construction,
+  .qc-beam-active,
+  .path-draw {
+    animation: none !important;
+    clip-path: none !important;
+  }
+}
+
+/* Print CSS: Strict Isolation for 8.5 x 11 inch US Letter Single Sheet */
+@media print {
+  @page {
+    size: 8.5in 11in;
+    margin: 0 !important;
+  }
+
+  html, body {
+    background: #ffffff !important;
+    overflow: visible !important;
+    width: 8.5in !important;
+    height: 11in !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .print-only-page {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 8.5in !important;
+    height: 11in !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    transform: none !important;
+  }
+
+  .print-safe-guide {
+    display: none !important;
+  }
+}
