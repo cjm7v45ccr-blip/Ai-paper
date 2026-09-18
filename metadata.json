@@ -1,6 +1,6 @@
 {
   "name": "PagePilot",
-  "description": "AI Visual Document Editor for creating polished, printable, editable 8.5x11 documents with Gemini",
+  "description": "Professional AI document & slide creation workspace with KaTeX math and layout intelligence",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

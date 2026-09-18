@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useRef, useState, useEffect, useCallback } from "react";
-import { DocumentModel, DocumentElement } from "@/types/document";
+import { DocumentModel, DocumentElement, DocumentMode, PageData } from "@/types/document";
 import { ElementRenderer } from "./ElementRenderer";
 import {
   DPI,
@@ -16,25 +16,41 @@ import {
   computeSnapAndGuides,
   AlignmentGuide,
 } from "@/lib/coordinates";
-import { RotateCw, Lock, Copy, Trash2, AlignCenterHorizontal, Sparkles } from "lucide-react";
+import {
+  RotateCw,
+  Lock,
+  Copy,
+  Trash2,
+  AlignCenterHorizontal,
+  Sparkles,
+  Plus,
+  ChevronLeft,
+  ChevronRight,
+  Maximize,
+} from "lucide-react";
 import { StudioRuler } from "./StudioRuler";
 
 interface DocumentCanvasProps {
   document: DocumentModel;
+  documentMode: DocumentMode;
+  activePageIndex: number;
+  onSelectPageIndex: (index: number) => void;
+  onAddPage: () => void;
   zoom: number;
   selectedElementId: string | null;
   onSelectElement: (id: string | null) => void;
-  onUpdateElementPosition: (id: string, x: number, y: number) => void;
+  onUpdateElementPosition: (id: string, x: number, y: number, pageIndex?: number) => void;
   onUpdateElementDimensions: (
     id: string,
     width: number,
     height: number,
     x?: number,
-    y?: number
+    y?: number,
+    pageIndex?: number
   ) => void;
-  onUpdateElementRotation?: (id: string, rotation: number) => void;
-  onDeleteElement?: (id: string) => void;
-  onDuplicateElement?: (id: string) => void;
+  onUpdateElementRotation?: (id: string, rotation: number, pageIndex?: number) => void;
+  onDeleteElement?: (id: string, pageIndex?: number) => void;
+  onDuplicateElement?: (id: string, pageIndex?: number) => void;
   isBlackAndWhite: boolean;
   showMargins: boolean;
   onToggleMargins?: () => void;
@@ -46,6 +62,10 @@ type ResizeHandle = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w";
 
 export const DocumentCanvas: React.FC<DocumentCanvasProps> = ({
   document: doc,
+  documentMode,
+  activePageIndex,
+  onSelectPageIndex,
+  onAddPage,
   zoom,
   selectedElementId,
   onSelectElement,
@@ -60,20 +80,33 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = ({
   isPreviewMode = false,
   isAnimating,
 }) => {
-  const pageWidth = doc.page?.width || PAGE_WIDTH_INCHES;
-  const pageHeight = doc.page?.height || PAGE_HEIGHT_INCHES;
-  const safeMargin = doc.page?.safeMargin ?? SAFE_MARGIN_INCHES;
+  const isPresentation = documentMode === "presentation";
+  const pageWidth = isPresentation ? 13.333 : doc.page?.width || PAGE_WIDTH_INCHES;
+  const pageHeight = isPresentation ? 7.5 : doc.page?.height || PAGE_HEIGHT_INCHES;
+  const safeMargin = doc.page?.safeMargin ?? (isPresentation ? 0.5 : SAFE_MARGIN_INCHES);
 
-  const canvasWidthPx = inchesToPx(pageWidth); // 816px
-  const canvasHeightPx = inchesToPx(pageHeight); // 1056px
-  const marginPx = inchesToPx(safeMargin); // 43.2px
+  const canvasWidthPx = inchesToPx(pageWidth);
+  const canvasHeightPx = inchesToPx(pageHeight);
+  const marginPx = inchesToPx(safeMargin);
 
   const [activeGuides, setActiveGuides] = useState<AlignmentGuide[]>([]);
   const [dragTooltip, setDragTooltip] = useState<string | null>(null);
 
-  // Interaction References
+  // Normalize pages
+  const pages: PageData[] = doc.pages && doc.pages.length > 0
+    ? doc.pages
+    : [
+        {
+          id: "page-1",
+          title: "Page 1",
+          elements: doc.elements || [],
+        },
+      ];
+
+  // Drag Reference
   const dragRef = useRef<{
     id: string;
+    pageIndex: number;
     startX: number;
     startY: number;
     initialElemX: number;
@@ -82,8 +115,10 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = ({
     height: number;
   } | null>(null);
 
+  // Resize Reference
   const resizeRef = useRef<{
     id: string;
+    pageIndex: number;
     handle: ResizeHandle;
     startX: number;
     startY: number;
@@ -95,107 +130,65 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = ({
     preserveAspect: boolean;
   } | null>(null);
 
+  // Rotate Reference
   const rotateRef = useRef<{
     id: string;
+    pageIndex: number;
     centerX: number;
     centerY: number;
-    initRotation: number;
+    startAngle: number;
+    initialRot: number;
   } | null>(null);
 
-  // Drag Initiation
-  const handleMouseDownElement = (e: React.MouseEvent, element: DocumentElement) => {
-    if (isPreviewMode) return;
-    e.stopPropagation();
-
-    onSelectElement(element.id);
-
-    if (element.locked) return;
-
-    dragRef.current = {
-      id: element.id,
-      startX: e.clientX,
-      startY: e.clientY,
-      initialElemX: element.x,
-      initialElemY: element.y,
-      width: element.width,
-      height: element.height,
-    };
-  };
-
-  // Resize Initiation
-  const handleMouseDownResize = (
-    e: React.MouseEvent,
-    element: DocumentElement,
-    handle: ResizeHandle
-  ) => {
-    if (isPreviewMode || element.locked) return;
-    e.stopPropagation();
-
-    const isVisual =
-      ["chart", "diagram", "image", "illustration", "formula"].includes(element.type) ||
-      element.metadata?.preserveAspectRatio === true;
-
-    resizeRef.current = {
-      id: element.id,
-      handle,
-      startX: e.clientX,
-      startY: e.clientY,
-      initX: element.x,
-      initY: element.y,
-      initW: element.width,
-      initH: element.height,
-      aspectRatio: element.width / Math.max(0.1, element.height),
-      preserveAspect: isVisual || e.shiftKey,
-    };
-  };
-
-  // Rotate Initiation
-  const handleMouseDownRotate = (
-    e: React.MouseEvent,
-    element: DocumentElement,
-    elemLeftPx: number,
-    elemTopPx: number,
-    elemWidthPx: number,
-    elemHeightPx: number
-  ) => {
-    if (isPreviewMode || element.locked) return;
-    e.stopPropagation();
-
-    // Compute element center on screen
-    const canvasEl = document.getElementById("authoring-page-canvas");
-    if (!canvasEl) return;
-    const canvasRect = canvasEl.getBoundingClientRect();
-    const centerX = canvasRect.left + (elemLeftPx + elemWidthPx / 2) * zoom;
-    const centerY = canvasRect.top + (elemTopPx + elemHeightPx / 2) * zoom;
-
-    rotateRef.current = {
-      id: element.id,
-      centerX,
-      centerY,
-      initRotation: element.rotation || 0,
-    };
-  };
-
-  // Global Mouse Move & Up Listeners
+  // Keyboard Slide navigation in Presentation Mode
   useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      if (isPresentation) {
+        if (e.key === "ArrowRight" || e.key === "PageDown" || e.key === " ") {
+          if (activePageIndex < pages.length - 1) {
+            onSelectPageIndex(activePageIndex + 1);
+          }
+        } else if (e.key === "ArrowLeft" || e.key === "PageUp") {
+          if (activePageIndex > 0) {
+            onSelectPageIndex(activePageIndex - 1);
+          }
+        }
+      }
+
+      if (e.key === "Escape") {
+        onSelectElement(null);
+      }
+      if ((e.key === "Delete" || e.key === "Backspace") && selectedElementId) {
+        const activeElem = pages[activePageIndex]?.elements?.find((el) => el.id === selectedElementId);
+        if (activeElem && !activeElem.locked) {
+          onDeleteElement?.(selectedElementId, activePageIndex);
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isPresentation, activePageIndex, pages.length, selectedElementId, onSelectPageIndex, onSelectElement, onDeleteElement]);
+
+  // Global Pointer Events for Drag / Resize / Rotate
+  const handlePointerMove = useCallback(
+    (e: PointerEvent) => {
       // 1. DRAG
       if (dragRef.current) {
-        const { id, startX, startY, initialElemX, initialElemY, width, height } = dragRef.current;
-        const deltaX = (e.clientX - startX) / (DPI * zoom);
-        const deltaY = (e.clientY - startY) / (DPI * zoom);
+        const { id, pageIndex, startX, startY, initialElemX, initialElemY, width, height } = dragRef.current;
+        const deltaXPx = (e.clientX - startX) / zoom;
+        const deltaYPx = (e.clientY - startY) / zoom;
 
-        const rawTarget = {
-          id,
-          x: initialElemX + deltaX,
-          y: initialElemY + deltaY,
-          width,
-          height,
-        };
+        const targetXInches = initialElemX + deltaXPx / DPI;
+        const targetYInches = initialElemY + deltaYPx / DPI;
 
-        const otherElements = doc.elements.filter((el) => el.id !== id);
-        const snap = computeSnapAndGuides(
-          rawTarget,
+        const pageElements = pages[pageIndex]?.elements || [];
+        const otherElements = pageElements.filter((el) => el.id !== id);
+
+        const snapRes = computeSnapAndGuides(
+          { id, x: targetXInches, y: targetYInches, width, height },
           otherElements,
           0.08,
           pageWidth,
@@ -203,493 +196,440 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = ({
           safeMargin
         );
 
-        setActiveGuides(snap.guides);
-        setDragTooltip(`X: ${snap.x.toFixed(2)}"  Y: ${snap.y.toFixed(2)}"`);
-        onUpdateElementPosition(id, snap.x, snap.y);
+        setActiveGuides(snapRes.guides);
+        setDragTooltip(`X: ${snapRes.x.toFixed(2)}"  Y: ${snapRes.y.toFixed(2)}"`);
+        onUpdateElementPosition(id, snapRes.x, snapRes.y, pageIndex);
         return;
       }
 
       // 2. RESIZE
       if (resizeRef.current) {
-        const {
-          id,
-          handle,
-          startX,
-          startY,
-          initX,
-          initY,
-          initW,
-          initH,
-          aspectRatio,
-          preserveAspect,
-        } = resizeRef.current;
-
-        const deltaX = (e.clientX - startX) / (DPI * zoom);
-        const deltaY = (e.clientY - startY) / (DPI * zoom);
+        const { id, pageIndex, handle, startX, startY, initX, initY, initW, initH, aspectRatio, preserveAspect } =
+          resizeRef.current;
+        const deltaXPx = (e.clientX - startX) / zoom;
+        const deltaYPx = (e.clientY - startY) / zoom;
+        const deltaXInches = deltaXPx / DPI;
+        const deltaYInches = deltaYPx / DPI;
 
         let newX = initX;
         let newY = initY;
         let newW = initW;
         let newH = initH;
 
-        const shouldPreserve = preserveAspect || e.shiftKey;
-
-        // X adjustments
-        if (handle.includes("e")) {
-          newW = Math.max(MIN_ELEMENT_WIDTH, initW + deltaX);
-        } else if (handle.includes("w")) {
-          const maxDelta = initW - MIN_ELEMENT_WIDTH;
-          const allowedDelta = Math.min(deltaX, maxDelta);
-          newX = Math.max(0, initX + allowedDelta);
-          newW = initW - (newX - initX);
+        if (handle.includes("e")) newW = initW + deltaXInches;
+        if (handle.includes("s")) newH = initH + deltaYInches;
+        if (handle.includes("w")) {
+          newW = initW - deltaXInches;
+          newX = initX + deltaXInches;
+        }
+        if (handle.includes("n")) {
+          newH = initH - deltaYInches;
+          newY = initY + deltaYInches;
         }
 
-        // Y adjustments
-        if (handle.includes("s")) {
-          newH = Math.max(MIN_ELEMENT_HEIGHT, initH + deltaY);
-        } else if (handle.includes("n")) {
-          const maxDelta = initH - MIN_ELEMENT_HEIGHT;
-          const allowedDelta = Math.min(deltaY, maxDelta);
-          newY = Math.max(0, initY + allowedDelta);
-          newH = initH - (newY - initY);
-        }
-
-        // Proportional lock
-        if (shouldPreserve && aspectRatio > 0) {
-          if (["e", "w"].includes(handle)) {
+        if (preserveAspect || e.shiftKey) {
+          if (handle === "se" || handle === "nw") {
             newH = newW / aspectRatio;
-          } else if (["n", "s"].includes(handle)) {
-            newW = newH * aspectRatio;
-          } else {
-            // Corner handles: pick dominant dimension
-            const scale = Math.max(newW / initW, newH / initH);
-            newW = initW * scale;
-            newH = initH * scale;
-
-            if (handle.includes("w")) {
-              newX = initX + (initW - newW);
-            }
-            if (handle.includes("n")) {
-              newY = initY + (initH - newH);
-            }
+          } else if (handle === "ne" || handle === "sw") {
+            newH = newW / aspectRatio;
           }
         }
 
-        // Clamp to physical page
-        const clampedDims = clampDimensions(newX, newY, newW, newH, pageWidth, pageHeight);
-        const clampedPos = clampPosition(
-          newX,
-          newY,
-          clampedDims.width,
-          clampedDims.height,
-          pageWidth,
-          pageHeight
-        );
+        // Apply Clamping
+        newW = Math.max(MIN_ELEMENT_WIDTH, newW);
+        newH = Math.max(MIN_ELEMENT_HEIGHT, newH);
 
-        setDragTooltip(
-          `W: ${clampedDims.width.toFixed(2)}"  H: ${clampedDims.height.toFixed(2)}"`
-        );
-        onUpdateElementDimensions(
-          id,
-          clampedDims.width,
-          clampedDims.height,
-          clampedPos.x,
-          clampedPos.y
-        );
+        const clampedDims = clampDimensions(newX, newY, newW, newH, pageWidth, pageHeight);
+        const clampedPos = clampPosition(newX, newY, clampedDims.width, clampedDims.height, pageWidth, pageHeight);
+
+        setDragTooltip(`W: ${clampedDims.width.toFixed(2)}"  H: ${clampedDims.height.toFixed(2)}"`);
+        onUpdateElementDimensions(id, clampedDims.width, clampedDims.height, clampedPos.x, clampedPos.y, pageIndex);
         return;
       }
 
       // 3. ROTATE
       if (rotateRef.current) {
-        const { id, centerX, centerY } = rotateRef.current;
-        const rad = Math.atan2(e.clientY - centerY, e.clientX - centerX);
-        let deg = Math.round((rad * 180) / Math.PI + 90);
-        if (deg < 0) deg += 360;
+        const { id, pageIndex, centerX, centerY, startAngle, initialRot } = rotateRef.current;
+        const currentAngle = Math.atan2(e.clientY - centerY, e.clientX - centerX) * (180 / Math.PI);
+        let deltaAngle = currentAngle - startAngle;
+        let newRot = Math.round((initialRot + deltaAngle) % 360);
+        if (newRot < 0) newRot += 360;
 
-        // Snap to clean 45° angles
-        const snapAngles = [0, 45, 90, 135, 180, 225, 270, 315, 360];
-        for (const snap of snapAngles) {
-          if (Math.abs(deg - snap) <= 6) {
-            deg = snap === 360 ? 0 : snap;
-            break;
-          }
+        // Snap to 45 degree increments if holding shift
+        if (e.shiftKey) {
+          newRot = Math.round(newRot / 45) * 45;
         }
 
-        setDragTooltip(`${deg}°`);
-        if (onUpdateElementRotation) {
-          onUpdateElementRotation(id, deg);
-        }
+        setDragTooltip(`Angle: ${newRot}°`);
+        onUpdateElementRotation?.(id, newRot, pageIndex);
       }
-    };
+    },
+    [
+      zoom,
+      pages,
+      pageWidth,
+      pageHeight,
+      safeMargin,
+      onUpdateElementPosition,
+      onUpdateElementDimensions,
+      onUpdateElementRotation,
+    ]
+  );
 
-    const handleMouseUp = () => {
-      dragRef.current = null;
-      resizeRef.current = null;
-      rotateRef.current = null;
-      setActiveGuides([]);
-      setDragTooltip(null);
-    };
+  const handlePointerUp = useCallback(() => {
+    dragRef.current = null;
+    resizeRef.current = null;
+    rotateRef.current = null;
+    setActiveGuides([]);
+    setDragTooltip(null);
+  }, []);
 
-    window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("mouseup", handleMouseUp);
-    return () => {
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseup", handleMouseUp);
-    };
-  }, [
-    zoom,
-    doc.elements,
-    pageWidth,
-    pageHeight,
-    safeMargin,
-    onUpdateElementPosition,
-    onUpdateElementDimensions,
-    onUpdateElementRotation,
-  ]);
-
-  // Keyboard Shortcuts (Delete, Duplicate, Nudge)
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (!selectedElementId) return;
-
-      // Ignore if user is typing in an input or textarea
-      const target = e.target as HTMLElement;
-      if (
-        target.tagName === "INPUT" ||
-        target.tagName === "TEXTAREA" ||
-        target.isContentEditable
-      ) {
-        return;
-      }
-
-      const selectedEl = doc.elements.find((el) => el.id === selectedElementId);
-      if (!selectedEl) return;
-
-      if (e.key === "Delete" || e.key === "Backspace") {
-        e.preventDefault();
-        if (!selectedEl.locked && onDeleteElement) {
-          onDeleteElement(selectedElementId);
-        }
-      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "d") {
-        e.preventDefault();
-        if (onDuplicateElement) {
-          onDuplicateElement(selectedElementId);
-        }
-      } else if (e.key === "Escape") {
-        onSelectElement(null);
-      } else if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) {
-        e.preventDefault();
-        if (selectedEl.locked) return;
-
-        const step = e.shiftKey ? 0.01 : 0.05;
-        let nextX = selectedEl.x;
-        let nextY = selectedEl.y;
-
-        if (e.key === "ArrowLeft") nextX -= step;
-        if (e.key === "ArrowRight") nextX += step;
-        if (e.key === "ArrowUp") nextY -= step;
-        if (e.key === "ArrowDown") nextY += step;
-
-        const clamped = clampPosition(
-          nextX,
-          nextY,
-          selectedEl.width,
-          selectedEl.height,
-          pageWidth,
-          pageHeight
-        );
-        onUpdateElementPosition(selectedElementId, clamped.x, clamped.y);
-      }
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
     };
+  }, [handlePointerMove, handlePointerUp]);
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [
-    selectedElementId,
-    doc.elements,
-    pageWidth,
-    pageHeight,
-    onDeleteElement,
-    onDuplicateElement,
-    onSelectElement,
-    onUpdateElementPosition,
-  ]);
+  // Start Element Drag
+  const startDrag = (e: React.PointerEvent, el: DocumentElement, pageIndex: number) => {
+    if (isPreviewMode || el.locked) return;
+    e.stopPropagation();
+    onSelectElement(el.id);
+    onSelectPageIndex(pageIndex);
+
+    dragRef.current = {
+      id: el.id,
+      pageIndex,
+      startX: e.clientX,
+      startY: e.clientY,
+      initialElemX: el.x,
+      initialElemY: el.y,
+      width: el.width,
+      height: el.height,
+    };
+  };
+
+  // Start Element Resize
+  const startResize = (e: React.PointerEvent, el: DocumentElement, pageIndex: number, handle: ResizeHandle) => {
+    if (isPreviewMode || el.locked) return;
+    e.stopPropagation();
+
+    resizeRef.current = {
+      id: el.id,
+      pageIndex,
+      handle,
+      startX: e.clientX,
+      startY: e.clientY,
+      initX: el.x,
+      initY: el.y,
+      initW: el.width,
+      initH: el.height,
+      aspectRatio: el.width / el.height,
+      preserveAspect: el.metadata?.preserveAspectRatio ?? false,
+    };
+  };
+
+  // Render a Single Page Canvas
+  const renderPage = (page: PageData, pageIdx: number) => {
+    const isPageActive = pageIdx === activePageIndex;
+    const pageElements = page.elements || [];
+
+    return (
+      <div
+        key={page.id || pageIdx}
+        onClick={() => {
+          onSelectPageIndex(pageIdx);
+          onSelectElement(null);
+        }}
+        className="relative group transition-all duration-200"
+        style={{
+          width: `${canvasWidthPx}px`,
+          height: `${canvasHeightPx}px`,
+        }}
+      >
+        {/* Page Top Indicator in Multi-Page Document Mode */}
+        {!isPresentation && pages.length > 1 && (
+          <div className="absolute -top-7 left-0 right-0 flex items-center justify-between text-[11px] font-mono text-zinc-400 select-none px-1">
+            <span className="flex items-center gap-1.5 font-medium">
+              <span className="w-2 h-2 rounded-full bg-zinc-600" />
+              Page {pageIdx + 1} of {pages.length}
+            </span>
+            <span className="text-zinc-500">{page.title || "Standard Section"}</span>
+          </div>
+        )}
+
+        {/* Paper Surface */}
+        <div
+          id={`pagepilot-canvas-page-${pageIdx}`}
+          className={`w-full h-full relative overflow-hidden transition-all select-none ${
+            isBlackAndWhite ? "filter grayscale contrast-125" : ""
+          }`}
+          style={{
+            backgroundColor: page.background || doc.page?.background || "#ffffff",
+            boxShadow:
+              "0 20px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.08)",
+            borderRadius: isPresentation ? "12px" : "4px",
+          }}
+        >
+          {/* Print-Safe Margin Guides (0.45" standard) */}
+          {showMargins && !isPreviewMode && (
+            <div
+              className="absolute pointer-events-none border border-dashed border-indigo-400/40 z-50"
+              style={{
+                top: `${marginPx}px`,
+                left: `${marginPx}px`,
+                right: `${marginPx}px`,
+                bottom: `${marginPx}px`,
+              }}
+            >
+              <span className="absolute top-1 left-1.5 text-[9px] font-mono text-indigo-400/60 select-none uppercase tracking-wider">
+                0.45&quot; Safe Margin
+              </span>
+            </div>
+          )}
+
+          {/* Active Alignment Guide Lines */}
+          {isPageActive &&
+            activeGuides.map((guide, idx) => {
+              const posPx = inchesToPx(guide.position);
+              return guide.type === "vertical" ? (
+                <div
+                  key={`v-${idx}`}
+                  className="absolute top-0 bottom-0 border-l border-indigo-500 z-50 pointer-events-none"
+                  style={{ left: `${posPx}px` }}
+                >
+                  {guide.label && (
+                    <span className="absolute top-2 left-1 text-[9px] font-mono bg-indigo-600 text-white px-1 py-0.2 rounded shadow-xs">
+                      {guide.label}
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <div
+                  key={`h-${idx}`}
+                  className="absolute left-0 right-0 border-t border-indigo-500 z-50 pointer-events-none"
+                  style={{ top: `${posPx}px` }}
+                >
+                  {guide.label && (
+                    <span className="absolute top-1 left-2 text-[9px] font-mono bg-indigo-600 text-white px-1 py-0.2 rounded shadow-xs">
+                      {guide.label}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+
+          {/* Elements on this page */}
+          {pageElements.map((el) => {
+            const isSelected = el.id === selectedElementId && isPageActive;
+            const xPx = inchesToPx(el.x);
+            const yPx = inchesToPx(el.y);
+            const wPx = inchesToPx(el.width);
+            const hPx = inchesToPx(el.height);
+            const rot = el.rotation || 0;
+
+            return (
+              <div
+                key={el.id}
+                onPointerDown={(e) => startDrag(e, el, pageIdx)}
+                className={`absolute cursor-move transition-shadow select-none group ${
+                  isSelected ? "z-40" : ""
+                } ${el.locked ? "cursor-not-allowed" : ""}`}
+                style={{
+                  left: `${xPx}px`,
+                  top: `${yPx}px`,
+                  width: `${wPx}px`,
+                  height: `${hPx}px`,
+                  transform: rot ? `rotate(${rot}deg)` : undefined,
+                  zIndex: el.zIndex || 1,
+                }}
+              >
+                {/* Element Component Renderer */}
+                <div className="w-full h-full relative">
+                  <ElementRenderer
+                    element={el}
+                    isBlackAndWhite={isBlackAndWhite}
+                    isPresentation={isPresentation}
+                  />
+                </div>
+
+                {/* Selection Overlay & Handles */}
+                {isSelected && !isPreviewMode && (
+                  <div className="absolute inset-0 pointer-events-none ring-2 ring-indigo-500/90 rounded-sm">
+                    {/* Dimension Badge */}
+                    <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 bg-zinc-900/95 text-white border border-white/[0.1] px-1.5 py-0.5 rounded text-[10px] font-mono tracking-tight shadow-md whitespace-nowrap z-50">
+                      {el.width.toFixed(2)}&quot; × {el.height.toFixed(2)}&quot;
+                    </div>
+
+                    {/* Quick Floating Action Bar Above Element */}
+                    <div className="absolute -top-9 left-1/2 -translate-x-1/2 flex items-center gap-1 bg-zinc-900 text-zinc-300 border border-white/[0.15] p-1 rounded-lg shadow-xl pointer-events-auto z-50">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDuplicateElement?.(el.id, pageIdx);
+                        }}
+                        className="p-1 rounded hover:bg-white/[0.1] text-zinc-300 hover:text-white"
+                        title="Duplicate"
+                      >
+                        <Copy className="w-3 h-3" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDeleteElement?.(el.id, pageIdx);
+                        }}
+                        className="p-1 rounded hover:bg-rose-950/60 text-zinc-300 hover:text-rose-400"
+                        title="Delete"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+
+                    {/* 4 Corner Resize Handles */}
+                    {!el.locked && (
+                      <>
+                        <div
+                          onPointerDown={(e) => startResize(e, el, pageIdx, "nw")}
+                          className="absolute -top-1.5 -left-1.5 w-3 h-3 bg-white border-2 border-indigo-600 rounded-xs cursor-nwse-resize pointer-events-auto shadow-xs"
+                        />
+                        <div
+                          onPointerDown={(e) => startResize(e, el, pageIdx, "ne")}
+                          className="absolute -top-1.5 -right-1.5 w-3 h-3 bg-white border-2 border-indigo-600 rounded-xs cursor-nesw-resize pointer-events-auto shadow-xs"
+                        />
+                        <div
+                          onPointerDown={(e) => startResize(e, el, pageIdx, "se")}
+                          className="absolute -bottom-1.5 -right-1.5 w-3 h-3 bg-white border-2 border-indigo-600 rounded-xs cursor-nwse-resize pointer-events-auto shadow-xs"
+                        />
+                        <div
+                          onPointerDown={(e) => startResize(e, el, pageIdx, "sw")}
+                          className="absolute -bottom-1.5 -left-1.5 w-3 h-3 bg-white border-2 border-indigo-600 rounded-xs cursor-nesw-resize pointer-events-auto shadow-xs"
+                        />
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
 
   return (
-    <div
-      className="relative flex flex-col items-center justify-start min-h-full py-8 px-8 pb-36 select-none"
-      onClick={() => onSelectElement(null)}
-    >
-      {/* Visual Dimension & Position Live Tooltip */}
+    <div className="flex-1 bg-[#0c0d10] relative overflow-auto flex flex-col items-center justify-start p-6 md:p-12 transition-colors select-none">
+      {/* Dynamic Coordinate / Dimension Drag Tooltip */}
       {dragTooltip && (
-        <div className="no-print fixed top-20 left-1/2 -translate-x-1/2 bg-slate-900/90 text-white text-xs font-mono px-3 py-1.5 rounded-full shadow-lg z-50 pointer-events-none backdrop-blur animate-in fade-in duration-100">
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 bg-zinc-900/90 backdrop-blur-md text-white border border-white/[0.1] px-3 py-1 rounded-full text-xs font-mono shadow-2xl z-50">
           {dragTooltip}
         </div>
       )}
 
-      {/* Modern Studio Architectural Spatial Guide */}
-      {!isPreviewMode && (
-        <StudioRuler
-          pageWidthInches={pageWidth}
-          safeMarginInches={safeMargin}
-          zoom={zoom}
-          showMargins={showMargins}
-          onToggleMargins={onToggleMargins}
-        />
-      )}
-
-      {/* Page Canvas Container with Strict Aspect Ratio & Shadow */}
+      {/* Main Canvas Workspace Container with Scaled Zoom */}
       <div
-        id="studio-document-canvas"
-        className={`print-only-page relative bg-white transition-all duration-200 ${
-          isAnimating ? "animating-construction" : ""
-        }`}
+        className="flex flex-col items-center gap-14 transition-transform duration-100 ease-out origin-top"
         style={{
-          width: `${canvasWidthPx}px`,
-          height: `${canvasHeightPx}px`,
           transform: `scale(${zoom})`,
-          transformOrigin: "center top",
-          boxShadow: isPreviewMode
-            ? "0 4px 20px -2px rgba(0, 0, 0, 0.08)"
-            : "0 16px 48px -8px rgba(0, 0, 0, 0.14), 0 2px 8px rgba(0, 0, 0, 0.04)",
-          backgroundColor: doc.page?.background || "#ffffff",
-          overflow: "visible",
+          marginBottom: "100px",
         }}
       >
-        {/* Safe Margin Guide Line & Badge */}
-        {!isPreviewMode && showMargins && (
-          <div
-            className="print-safe-guide absolute pointer-events-none border border-dashed border-sky-400/60 z-30 transition-opacity"
-            style={{
-              top: `${marginPx}px`,
-              left: `${marginPx}px`,
-              right: `${marginPx}px`,
-              bottom: `${marginPx}px`,
-            }}
-          >
-            <span className="absolute -top-3 left-2 bg-sky-50 text-sky-700 text-[9px] font-mono px-1.5 py-0.5 rounded border border-sky-300 font-semibold shadow-xs">
-              0.45" Safe Margin
-            </span>
+        {isPresentation ? (
+          /* =========================================================================
+             PRESENTATION MODE (SINGLE ACTIVE 16:9 SLIDE VIEW WITH BOTTOM SLIDE STRIP)
+             ========================================================================= */
+          <div className="flex flex-col items-center gap-6">
+            {/* Active Slide Canvas */}
+            {pages[activePageIndex] && renderPage(pages[activePageIndex], activePageIndex)}
+
+            {/* Presentation Bottom Navigation Strip */}
+            <div className="flex items-center gap-3 bg-[#18191e]/90 backdrop-blur-md border border-white/[0.08] px-4 py-2 rounded-2xl shadow-xl">
+              <button
+                onClick={() => onSelectPageIndex(Math.max(0, activePageIndex - 1))}
+                disabled={activePageIndex <= 0}
+                className="p-1.5 rounded-lg text-zinc-300 hover:text-white hover:bg-white/[0.08] disabled:opacity-30 disabled:pointer-events-none transition-colors"
+                title="Previous Slide (Left Arrow)"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+
+              <div className="flex items-center gap-1.5">
+                {pages.map((p, idx) => (
+                  <button
+                    key={p.id || idx}
+                    onClick={() => onSelectPageIndex(idx)}
+                    className={`h-2 rounded-full transition-all ${
+                      idx === activePageIndex ? "w-8 bg-indigo-500" : "w-2 bg-zinc-600 hover:bg-zinc-400"
+                    }`}
+                    title={`Slide ${idx + 1}`}
+                  />
+                ))}
+              </div>
+
+              <span className="text-xs font-mono text-zinc-400 px-1">
+                {activePageIndex + 1} / {pages.length}
+              </span>
+
+              <button
+                onClick={() => onSelectPageIndex(Math.min(pages.length - 1, activePageIndex + 1))}
+                disabled={activePageIndex >= pages.length - 1}
+                className="p-1.5 rounded-lg text-zinc-300 hover:text-white hover:bg-white/[0.08] disabled:opacity-30 disabled:pointer-events-none transition-colors"
+                title="Next Slide (Right Arrow)"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+
+              <div className="h-4 w-px bg-white/[0.1] mx-1" />
+
+              <button
+                onClick={onAddPage}
+                className="flex items-center gap-1 text-xs font-medium text-indigo-400 hover:text-indigo-300 px-2 py-1 rounded-lg hover:bg-white/[0.06] transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Slide</span>
+              </button>
+            </div>
+          </div>
+        ) : (
+          /* =========================================================================
+             DOCUMENT MODE (VERTICAL MULTI-PAGE STACK)
+             ========================================================================= */
+          <div className="flex flex-col items-center gap-12">
+            {pages.map((page, pageIdx) => (
+              <React.Fragment key={page.id || pageIdx}>
+                {renderPage(page, pageIdx)}
+
+                {/* "+ Add Page" Divider Button between stacked pages */}
+                {pageIdx < pages.length - 1 && (
+                  <div className="flex items-center gap-3 w-full justify-center opacity-40 hover:opacity-100 transition-opacity">
+                    <div className="h-px bg-white/[0.1] w-32" />
+                    <button
+                      onClick={onAddPage}
+                      className="flex items-center gap-1 text-[11px] font-medium text-zinc-400 hover:text-white bg-[#18191e] px-3 py-1 rounded-full border border-white/[0.08] shadow-xs"
+                    >
+                      <Plus className="w-3 h-3" />
+                      <span>Add Page</span>
+                    </button>
+                    <div className="h-px bg-white/[0.1] w-32" />
+                  </div>
+                )}
+              </React.Fragment>
+            ))}
+
+            {/* Bottom Add Page Action */}
+            <div className="pt-2">
+              <button
+                onClick={onAddPage}
+                className="flex items-center gap-1.5 text-xs font-medium text-zinc-400 hover:text-white bg-[#18191e] hover:bg-[#22242b] px-4 py-2 rounded-xl border border-white/[0.08] shadow-md transition-all"
+              >
+                <Plus className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Add New Page</span>
+              </button>
+            </div>
           </div>
         )}
-
-        {/* Dynamic Alignment Guide Lines */}
-        {!isPreviewMode &&
-          activeGuides.map((guide, idx) => {
-            const posPx = inchesToPx(guide.position);
-            if (guide.type === "vertical") {
-              return (
-                <div
-                  key={idx}
-                  className="absolute top-0 bottom-0 pointer-events-none z-50 flex flex-col items-center"
-                  style={{ left: `${posPx}px` }}
-                >
-                  <div className="w-[1px] h-full bg-indigo-500 shadow-[0_0_4px_rgba(99,102,241,0.6)]" />
-                  {guide.label && (
-                    <span className="absolute top-1 bg-indigo-600 text-white text-[9px] font-mono px-1 rounded shadow-sm whitespace-nowrap">
-                      {guide.label}
-                    </span>
-                  )}
-                </div>
-              );
-            } else {
-              return (
-                <div
-                  key={idx}
-                  className="absolute left-0 right-0 pointer-events-none z-50 flex items-center justify-center"
-                  style={{ top: `${posPx}px` }}
-                >
-                  <div className="h-[1px] w-full bg-indigo-500 shadow-[0_0_4px_rgba(99,102,241,0.6)]" />
-                  {guide.label && (
-                    <span className="absolute left-1 bg-indigo-600 text-white text-[9px] font-mono px-1 rounded shadow-sm whitespace-nowrap">
-                      {guide.label}
-                    </span>
-                  )}
-                </div>
-              );
-            }
-          })}
-
-        {/* Laser Sweep Beam during AI Generation */}
-        {isAnimating && (
-          <div className="qc-beam-active absolute left-0 right-0 h-[3px] bg-gradient-to-r from-transparent via-indigo-500 to-transparent pointer-events-none z-50 shadow-[0_0_16px_rgba(99,102,241,0.9)]" />
-        )}
-
-        {/* Document Elements */}
-        {doc.elements.map((el) => {
-          if (el.visible === false) return null;
-
-          const isSelected = !isPreviewMode && selectedElementId === el.id;
-          const leftPx = inchesToPx(el.x);
-          const topPx = inchesToPx(el.y);
-          const widthPx = inchesToPx(el.width);
-          const heightPx = inchesToPx(el.height);
-          const rotationDeg = el.rotation || 0;
-
-          // Check if element breaches safe margins for a subtle indicator
-          const isBreachingMargin =
-            el.x < safeMargin - 0.01 ||
-            el.y < safeMargin - 0.01 ||
-            el.x + el.width > pageWidth - safeMargin + 0.01 ||
-            el.y + el.height > pageHeight - safeMargin + 0.01;
-
-          return (
-            <div
-              key={el.id}
-              id={`el-${el.id}`}
-              onMouseDown={(e) => handleMouseDownElement(e, el)}
-              className={`absolute transition-shadow duration-100 ${
-                isPreviewMode
-                  ? "cursor-default"
-                  : el.locked
-                  ? "cursor-not-allowed"
-                  : "cursor-move"
-              } ${
-                isSelected
-                  ? "ring-2 ring-indigo-600 ring-offset-1 z-40"
-                  : !isPreviewMode
-                  ? "hover:ring-1 hover:ring-indigo-300"
-                  : ""
-              }`}
-              style={{
-                left: `${leftPx}px`,
-                top: `${topPx}px`,
-                width: `${widthPx}px`,
-                height: `${heightPx}px`,
-                transform: rotationDeg ? `rotate(${rotationDeg}deg)` : undefined,
-                transformOrigin: "center center",
-                zIndex: isSelected ? 45 : el.zIndex || 1,
-                backgroundColor: el.style?.backgroundColor || "transparent",
-                borderColor: el.style?.borderColor || "transparent",
-                borderWidth: el.style?.borderWidth ? `${el.style.borderWidth}px` : "0px",
-                borderStyle: el.style?.borderStyle || "none",
-                borderRadius: el.style?.borderRadius ? `${el.style.borderRadius}px` : "0px",
-                padding: el.style?.padding ? `${el.style.padding}px` : "0px",
-                opacity: el.style?.opacity !== undefined ? el.style.opacity : 1,
-                boxShadow: el.style?.boxShadow || undefined,
-              }}
-            >
-              <ElementRenderer
-                element={el}
-                dpi={DPI}
-                isSelected={isSelected}
-                isBlackAndWhite={isBlackAndWhite}
-                isPreview={isPreviewMode}
-              />
-
-              {/* Locked Indicator Badge */}
-              {!isPreviewMode && el.locked && (
-                <div
-                  className="no-print absolute -top-2.5 -right-2.5 bg-amber-500 text-white p-1 rounded-full shadow-sm z-50"
-                  title="Element locked. Unlock in right inspector to edit."
-                >
-                  <Lock className="w-3 h-3" />
-                </div>
-              )}
-
-              {/* Safe Margin Warning Badge when outside 0.45" */}
-              {!isPreviewMode && !isSelected && isBreachingMargin && showMargins && (
-                <div
-                  className="no-print absolute -top-2 -left-2 w-2 h-2 bg-amber-400 rounded-full ring-2 ring-white shadow-xs z-30"
-                  title="Element extends outside the 0.45 inch safe print margin"
-                />
-              )}
-
-              {/* Selection Transform Controls (8-direction Resizing + Rotation Pin) */}
-              {isSelected && !el.locked && (
-                <>
-                  {/* Contextual Quick-Action Capsule */}
-                  <div
-                    className="no-print absolute -top-9 left-0 flex items-center gap-1 bg-slate-900/95 text-white text-[10px] px-2 py-1 rounded-md shadow-xl border border-slate-700/80 z-50 select-none animate-in fade-in"
-                    onMouseDown={(e) => e.stopPropagation()}
-                  >
-                    <span className="font-mono text-indigo-400 font-bold uppercase text-[9px] mr-1">
-                      {el.type}
-                    </span>
-                    <button
-                      onClick={() => {
-                        const centeredX = Math.round(((pageWidth - el.width) / 2) * 100) / 100;
-                        onUpdateElementPosition(el.id, centeredX, el.y);
-                      }}
-                      title="Center on Page"
-                      className="p-1 hover:bg-slate-800 rounded text-slate-300 hover:text-white transition-colors"
-                    >
-                      <AlignCenterHorizontal className="w-3 h-3" />
-                    </button>
-                    {onDuplicateElement && (
-                      <button
-                        onClick={() => onDuplicateElement(el.id)}
-                        title="Duplicate Element"
-                        className="p-1 hover:bg-slate-800 rounded text-slate-300 hover:text-white transition-colors"
-                      >
-                        <Copy className="w-3 h-3" />
-                      </button>
-                    )}
-                    {onDeleteElement && (
-                      <button
-                        onClick={() => onDeleteElement(el.id)}
-                        title="Delete Element (Del)"
-                        className="p-1 hover:bg-rose-950 text-rose-400 hover:text-rose-200 rounded transition-colors"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Rotation Handle with stem */}
-                  <div
-                    className="no-print absolute -top-7 left-1/2 -translate-x-1/2 flex flex-col items-center cursor-grab active:cursor-grabbing z-50"
-                    onMouseDown={(e) =>
-                      handleMouseDownRotate(e, el, leftPx, topPx, widthPx, heightPx)
-                    }
-                    title="Drag to rotate (Snaps to 0°, 45°, 90°, 180°)"
-                  >
-                    <div className="w-5 h-5 bg-white border-2 border-indigo-600 rounded-full flex items-center justify-center text-indigo-600 shadow-md hover:scale-110 transition-transform">
-                      <RotateCw className="w-2.5 h-2.5" />
-                    </div>
-                    <div className="w-[1.5px] h-2 bg-indigo-600" />
-                  </div>
-
-                  {/* Corner Handles */}
-                  <div
-                    className="no-print absolute -top-1.5 -left-1.5 w-3 h-3 bg-white border-2 border-indigo-600 rounded-xs cursor-nwse-resize hover:scale-125 transition-transform z-50 shadow-xs"
-                    onMouseDown={(e) => handleMouseDownResize(e, el, "nw")}
-                  />
-                  <div
-                    className="no-print absolute -top-1.5 -right-1.5 w-3 h-3 bg-white border-2 border-indigo-600 rounded-xs cursor-nesw-resize hover:scale-125 transition-transform z-50 shadow-xs"
-                    onMouseDown={(e) => handleMouseDownResize(e, el, "ne")}
-                  />
-                  <div
-                    className="no-print absolute -bottom-1.5 -left-1.5 w-3 h-3 bg-white border-2 border-indigo-600 rounded-xs cursor-nesw-resize hover:scale-125 transition-transform z-50 shadow-xs"
-                    onMouseDown={(e) => handleMouseDownResize(e, el, "sw")}
-                  />
-                  <div
-                    className="no-print absolute -bottom-1.5 -right-1.5 w-3 h-3 bg-white border-2 border-indigo-600 rounded-xs cursor-nwse-resize hover:scale-125 transition-transform z-50 shadow-xs"
-                    onMouseDown={(e) => handleMouseDownResize(e, el, "se")}
-                  />
-
-                  {/* Edge Handles */}
-                  <div
-                    className="no-print absolute -top-1.5 left-1/2 -translate-x-1/2 w-3 h-2 bg-white border-2 border-indigo-600 rounded-xs cursor-ns-resize hover:scale-110 transition-transform z-50 shadow-xs"
-                    onMouseDown={(e) => handleMouseDownResize(e, el, "n")}
-                  />
-                  <div
-                    className="no-print absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-2 bg-white border-2 border-indigo-600 rounded-xs cursor-ns-resize hover:scale-110 transition-transform z-50 shadow-xs"
-                    onMouseDown={(e) => handleMouseDownResize(e, el, "s")}
-                  />
-                  <div
-                    className="no-print absolute top-1/2 -left-1.5 -translate-y-1/2 w-2 h-3 bg-white border-2 border-indigo-600 rounded-xs cursor-ew-resize hover:scale-110 transition-transform z-50 shadow-xs"
-                    onMouseDown={(e) => handleMouseDownResize(e, el, "w")}
-                  />
-                  <div
-                    className="no-print absolute top-1/2 -right-1.5 -translate-y-1/2 w-2 h-3 bg-white border-2 border-indigo-600 rounded-xs cursor-ew-resize hover:scale-110 transition-transform z-50 shadow-xs"
-                    onMouseDown={(e) => handleMouseDownResize(e, el, "e")}
-                  />
-                </>
-              )}
-            </div>
-          );
-        })}
       </div>
     </div>
   );

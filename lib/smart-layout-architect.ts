@@ -521,7 +521,7 @@ export function autoDesignDocument(currentDoc: DocumentModel, prompt?: string): 
   };
 
   return {
-    message: "Dia has re-architected the document with golden-ratio column equilibrium, KaTeX formula elevation, and locked 0.45\" print bleeds.",
+    message: "Document layout balanced with dual-column equilibrium, KaTeX formula formatting, and verified 0.45\" print safe margins.",
     reasoning: {
       documentType: analysis.documentType,
       gridSystem: `Asymmetric Bento Matrix (Content width 7.4", Col width 3.58", Gutter 0.24", Left Y: ${leftY.toFixed(2)}", Right Y: ${rightY.toFixed(2)}")`,

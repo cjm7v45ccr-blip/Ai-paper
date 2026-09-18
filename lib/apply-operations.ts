@@ -1,4 +1,4 @@
-import { DocumentModel, Operation, DocumentElement } from "@/types/document";
+import { DocumentModel, Operation, DocumentElement, PageData } from "@/types/document";
 import { clampElementBounds, clampPosition, clampDimensions, PAGE_WIDTH_INCHES, PAGE_HEIGHT_INCHES } from "./coordinates";
 
 export function applyOperations(
@@ -7,22 +7,43 @@ export function applyOperations(
 ): DocumentModel {
   const pageWidth = currentDoc.page?.width || PAGE_WIDTH_INCHES;
   const pageHeight = currentDoc.page?.height || PAGE_HEIGHT_INCHES;
-  let updatedElements = [...currentDoc.elements];
+  
+  // Ensure pages array is initialized
+  let updatedPages: PageData[] = currentDoc.pages && currentDoc.pages.length > 0
+    ? JSON.parse(JSON.stringify(currentDoc.pages))
+    : [
+        {
+          id: "page-1",
+          title: "Page 1",
+          elements: currentDoc.elements ? JSON.parse(JSON.stringify(currentDoc.elements)) : [],
+        },
+      ];
+
+  let activePageIndex = 0;
 
   for (const op of operations) {
+    const opPageIndex = "pageIndex" in op ? op.pageIndex : undefined;
+    const targetPageIndex =
+      opPageIndex !== undefined && opPageIndex >= 0 && opPageIndex < updatedPages.length
+        ? opPageIndex
+        : activePageIndex;
+    
+    let currentElements = [...(updatedPages[targetPageIndex]?.elements || [])];
+
     switch (op.action) {
       case "add": {
         const clamped = clampElementBounds(op.element, pageWidth, pageHeight);
-        const existingIdx = updatedElements.findIndex((el) => el.id === clamped.id);
+        const existingIdx = currentElements.findIndex((el) => el.id === clamped.id);
         if (existingIdx >= 0) {
-          updatedElements[existingIdx] = clamped;
+          currentElements[existingIdx] = clamped;
         } else {
-          updatedElements.push(clamped);
+          currentElements.push(clamped);
         }
+        updatedPages[targetPageIndex].elements = currentElements;
         break;
       }
       case "update": {
-        updatedElements = updatedElements.map((el) => {
+        currentElements = currentElements.map((el) => {
           if (el.id === op.id) {
             const merged = {
               ...el,
@@ -40,37 +61,40 @@ export function applyOperations(
           }
           return el;
         });
+        updatedPages[targetPageIndex].elements = currentElements;
         break;
       }
       case "delete": {
-        updatedElements = updatedElements.filter((el) => el.id !== op.id);
+        currentElements = currentElements.filter((el) => el.id !== op.id);
+        updatedPages[targetPageIndex].elements = currentElements;
         break;
       }
       case "move": {
-        updatedElements = updatedElements.map((el) => {
+        currentElements = currentElements.map((el) => {
           if (el.id === op.id) {
             const pos = clampPosition(op.x, op.y, el.width, el.height, pageWidth, pageHeight);
             return { ...el, x: pos.x, y: pos.y };
           }
           return el;
         });
+        updatedPages[targetPageIndex].elements = currentElements;
         break;
       }
       case "resize": {
-        updatedElements = updatedElements.map((el) => {
+        currentElements = currentElements.map((el) => {
           if (el.id === op.id) {
             const dims = clampDimensions(el.x, el.y, op.width, op.height, pageWidth, pageHeight);
             return { ...el, width: dims.width, height: dims.height };
           }
           return el;
         });
+        updatedPages[targetPageIndex].elements = currentElements;
         break;
       }
       case "duplicate": {
-        const target = updatedElements.find((el) => el.id === op.id);
+        const target = currentElements.find((el) => el.id === op.id);
         if (target) {
-          const maxZ = updatedElements.reduce((max, e) => Math.max(max, e.zIndex || 1), 1);
-          // 0.2 inch offset, clamped
+          const maxZ = currentElements.reduce((max, e) => Math.max(max, e.zIndex || 1), 1);
           const offsetPos = clampPosition(
             target.x + 0.2,
             target.y + 0.2,
@@ -90,28 +114,50 @@ export function applyOperations(
               label: target.metadata?.label ? `${target.metadata.label} (Copy)` : undefined,
             },
           };
-          updatedElements.push(duplicated);
+          currentElements.push(duplicated);
         }
+        updatedPages[targetPageIndex].elements = currentElements;
         break;
       }
       case "reorder": {
-        updatedElements = updatedElements.map((el) =>
+        currentElements = currentElements.map((el) =>
           el.id === op.id ? { ...el, zIndex: op.zIndex } : el
         );
+        updatedPages[targetPageIndex].elements = currentElements;
         break;
       }
       case "replace": {
-        updatedElements = op.elements.map((el) => clampElementBounds(el, pageWidth, pageHeight));
+        currentElements = op.elements.map((el) => clampElementBounds(el, pageWidth, pageHeight));
+        updatedPages[targetPageIndex].elements = currentElements;
+        break;
+      }
+      case "addPage": {
+        updatedPages.push(op.page);
+        break;
+      }
+      case "deletePage": {
+        if (updatedPages.length > 1 && op.pageIndex >= 0 && op.pageIndex < updatedPages.length) {
+          updatedPages.splice(op.pageIndex, 1);
+        }
+        break;
+      }
+      case "switchMode": {
+        currentDoc.mode = op.mode;
         break;
       }
     }
   }
 
-  // Sort elements by zIndex to preserve layer order
-  updatedElements.sort((a, b) => (a.zIndex || 1) - (b.zIndex || 1));
+  // Preserve layer order per page
+  updatedPages.forEach((page) => {
+    if (page.elements) {
+      page.elements.sort((a, b) => (a.zIndex || 1) - (b.zIndex || 1));
+    }
+  });
 
   return {
     ...currentDoc,
-    elements: updatedElements,
+    pages: updatedPages,
+    elements: updatedPages[0]?.elements || [],
   };
 }

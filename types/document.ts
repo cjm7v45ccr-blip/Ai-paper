@@ -1,3 +1,5 @@
+export type DocumentMode = "document" | "presentation" | "worksheet" | "one-pager";
+
 export type ElementType =
   | "text"
   | "heading"
@@ -56,6 +58,10 @@ export interface DocumentElement {
   metadata?: {
     role?: string;
     label?: string;
+    badge?: string;
+    categoryBadge?: string;
+    accentColor?: string;
+    preserveAspectRatio?: boolean;
     formulaSymbol?: string;
     handCopyPrompt?: string;
     chartType?: "line" | "bar" | "step";
@@ -63,12 +69,19 @@ export interface DocumentElement {
   };
 }
 
+export interface PageData {
+  id: string;
+  title?: string;
+  elements: DocumentElement[];
+  background?: string;
+}
+
 export interface DocumentPage {
-  size: "letter";
-  width: number; // 8.5
-  height: number; // 11
+  size: "letter" | "a4" | "presentation-16-9" | "custom";
+  width: number; // 8.5 for letter, 13.33 for 16:9 presentation
+  height: number; // 11 for letter, 7.5 for 16:9 presentation
   unit: "in";
-  safeMargin: number; // 0.45
+  safeMargin: number; // 0.45 or 0.35
   background: string;
 }
 
@@ -84,20 +97,25 @@ export interface DocumentTheme {
 export interface DocumentModel {
   id?: string;
   title?: string;
+  mode?: DocumentMode;
   page: DocumentPage;
   theme: DocumentTheme;
-  elements: DocumentElement[];
+  pages?: PageData[]; // Multi-page / multi-slide support
+  elements: DocumentElement[]; // Single-page compatibility and fallback
 }
 
 export type Operation =
-  | { action: "add"; element: DocumentElement }
-  | { action: "update"; id: string; changes: Partial<DocumentElement> }
-  | { action: "delete"; id: string }
-  | { action: "move"; id: string; x: number; y: number }
-  | { action: "resize"; id: string; width: number; height: number }
-  | { action: "reorder"; id: string; zIndex: number }
-  | { action: "duplicate"; id: string }
-  | { action: "replace"; elements: DocumentElement[] };
+  | { action: "add"; element: DocumentElement; pageIndex?: number }
+  | { action: "update"; id: string; changes: Partial<DocumentElement>; pageIndex?: number }
+  | { action: "delete"; id: string; pageIndex?: number }
+  | { action: "move"; id: string; x: number; y: number; pageIndex?: number }
+  | { action: "resize"; id: string; width: number; height: number; pageIndex?: number }
+  | { action: "reorder"; id: string; zIndex: number; pageIndex?: number }
+  | { action: "duplicate"; id: string; pageIndex?: number }
+  | { action: "replace"; elements: DocumentElement[]; pageIndex?: number }
+  | { action: "addPage"; page: PageData }
+  | { action: "deletePage"; pageIndex: number }
+  | { action: "switchMode"; mode: DocumentMode };
 
 export interface QualityCheckIssue {
   severity: "error" | "warning" | "info";

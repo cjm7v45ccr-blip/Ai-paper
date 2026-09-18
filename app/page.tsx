@@ -1,8 +1,21 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { DocumentModel, DocumentElement, QualityCheckIssue, DesignReasoning } from "@/types/document";
-import { INITIAL_SAMPLE_DOCUMENT } from "@/lib/sample-document";
+import {
+  DocumentModel,
+  DocumentElement,
+  DocumentMode,
+  PageData,
+  QualityCheckIssue,
+  DesignReasoning,
+  Operation,
+} from "@/types/document";
+import {
+  INITIAL_SAMPLE_DOCUMENT,
+  SAMPLE_PRESENTATION_DECK,
+  SAMPLE_WORKSHEET,
+  SAMPLE_ONE_PAGER,
+} from "@/lib/sample-document";
 import { applyOperations } from "@/lib/apply-operations";
 import {
   runDeterministicQualityChecks,
@@ -12,12 +25,9 @@ import {
 import { triggerPrint } from "@/lib/print";
 import {
   clampElementBounds,
-  clampPosition,
-  clampDimensions,
   PAGE_WIDTH_INCHES,
   PAGE_HEIGHT_INCHES,
 } from "@/lib/coordinates";
-import { buildChemistryMeasurementGuide, autoDesignDocument } from "@/lib/smart-layout-architect";
 
 import { StudioHeader } from "@/components/editor/StudioHeader";
 import { LeftSidebar } from "@/components/editor/LeftSidebar";
@@ -28,15 +38,16 @@ import { ChatPanel } from "@/components/ai/ChatPanel";
 import { GenerationAnimation } from "@/components/ai/GenerationAnimation";
 import { PrintPreviewModal } from "@/components/editor/PrintPreviewModal";
 import { MarkdownMathModal } from "@/components/editor/MarkdownMathModal";
-import { MATH_PRESETS } from "@/lib/math-markdown-engine";
 
 export default function PagePilotEditor() {
   const [documentState, setDocumentState] = useState<DocumentModel>(INITIAL_SAMPLE_DOCUMENT);
   const [history, setHistory] = useState<DocumentModel[]>([INITIAL_SAMPLE_DOCUMENT]);
   const [historyIndex, setHistoryIndex] = useState(0);
 
-  const [documentTitle, setDocumentTitle] = useState("Compound Interest Study Guide");
-  const [zoom, setZoom] = useState(0.88);
+  const [documentMode, setDocumentMode] = useState<DocumentMode>("document");
+  const [activePageIndex, setActivePageIndex] = useState(0);
+
+  const [zoom, setZoom] = useState(0.85);
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
   const [isBlackAndWhite, setIsBlackAndWhite] = useState(false);
   const [showMargins, setShowMargins] = useState(true);
@@ -50,300 +61,244 @@ export default function PagePilotEditor() {
   const [chatMessages, setChatMessages] = useState<{ sender: "user" | "ai"; text: string }[]>([
     {
       sender: "ai",
-      text: "Hey! 👋 I'm PagePilot, your AI document designer. I can create stunning layouts, fix margins, add charts, formulas, study guides — basically anything. Just tell me what you want, or ask me anything!",
+      text: "PagePilot workspace initialized. You can create documents, presentation slides, or worksheets. Ask me to structure content, format KaTeX equations, or optimize spacing.",
     },
   ]);
   const [isChatPanelOpen, setIsChatPanelOpen] = useState(false);
   const [qualityIssues, setQualityIssues] = useState<QualityCheckIssue[]>([]);
 
-  const workspaceRef = useRef<HTMLDivElement>(null);
+  // Ensure pages are populated
+  const currentPages: PageData[] =
+    documentState.pages && documentState.pages.length > 0
+      ? documentState.pages
+      : [
+          {
+            id: "page-1",
+            title: "Page 1",
+            elements: documentState.elements || [],
+          },
+        ];
 
-  // Local Storage Persistence with boundary safety migration
-  useEffect(() => {
-    const saved = localStorage.getItem("pagepilot_doc");
-    if (saved) {
-      try {
-        const parsed: DocumentModel = JSON.parse(saved);
-        if (parsed?.elements && Array.isArray(parsed.elements)) {
-          // Clamp all elements to guarantee no boundary spills from corrupted storage
-          const sanitizedElements = parsed.elements.map((el) =>
-            clampElementBounds(el, parsed.page?.width || PAGE_WIDTH_INCHES, parsed.page?.height || PAGE_HEIGHT_INCHES)
-          );
-          const sanitizedDoc = { ...parsed, elements: sanitizedElements };
-          setDocumentState(sanitizedDoc);
-          setHistory([sanitizedDoc]);
-          return;
-        }
-      } catch (e) {
-        console.error("Failed to load document from storage", e);
-      }
-    }
-  }, []);
-
-  // Recalculate Quality Checks dynamically when document elements change
+  // Recalculate Quality Checks dynamically
   useEffect(() => {
     const issues = runDeterministicQualityChecks(documentState);
     setQualityIssues(issues);
   }, [documentState]);
 
-  const pushToHistory = useCallback((newDoc: DocumentModel) => {
-    const nextHistory = history.slice(0, historyIndex + 1);
-    nextHistory.push(newDoc);
-    setHistory(nextHistory);
-    setHistoryIndex(nextHistory.length - 1);
-    setDocumentState(newDoc);
-    try {
-      localStorage.setItem("pagepilot_doc", JSON.stringify(newDoc));
-    } catch (e) {
-      console.warn("Storage quota exceeded", e);
-    }
-  }, [history, historyIndex]);
+  const pushToHistory = useCallback(
+    (newDoc: DocumentModel) => {
+      const nextHistory = history.slice(0, historyIndex + 1);
+      nextHistory.push(newDoc);
+      setHistory(nextHistory);
+      setHistoryIndex(nextHistory.length - 1);
+      setDocumentState(newDoc);
+      try {
+        localStorage.setItem("pagepilot_doc", JSON.stringify(newDoc));
+      } catch (e) {
+        console.warn("Storage quota exceeded", e);
+      }
+    },
+    [history, historyIndex]
+  );
 
   const handleUndo = useCallback(() => {
     if (historyIndex > 0) {
-      const prevDoc = history[historyIndex - 1];
       setHistoryIndex(historyIndex - 1);
-      setDocumentState(prevDoc);
-      localStorage.setItem("pagepilot_doc", JSON.stringify(prevDoc));
+      setDocumentState(history[historyIndex - 1]);
     }
   }, [history, historyIndex]);
 
   const handleRedo = useCallback(() => {
     if (historyIndex < history.length - 1) {
-      const nextDoc = history[historyIndex + 1];
       setHistoryIndex(historyIndex + 1);
-      setDocumentState(nextDoc);
-      localStorage.setItem("pagepilot_doc", JSON.stringify(nextDoc));
+      setDocumentState(history[historyIndex + 1]);
     }
   }, [history, historyIndex]);
 
-  // Insert Equation from Google Docs Equation Toolbar
-  const handleInsertEquation = useCallback((preset?: any) => {
-    const eqString = preset?.equation || "\\int_{a}^{b} f(x)\\,dx = F(b) - F(a)";
-    const eqTitle = preset?.title || "Mathematical Equation";
-    const eqBreakdown = preset?.breakdown || [
-      { symbol: "f(x)", label: "Integrand function" },
-      { symbol: "dx", label: "Differential element" },
-      { symbol: "F(x)", label: "Antiderivative" },
-    ];
+  // Mode Switching
+  const handleModeChange = (mode: DocumentMode) => {
+    setDocumentMode(mode);
+    let updatedDoc = { ...documentState, mode };
 
-    const newId = `el-formula-${Date.now()}`;
-    const lastEl = documentState.elements[documentState.elements.length - 1];
-    const yPos = lastEl ? Math.min(8.8, lastEl.y + lastEl.height + 0.15) : 3.5;
-
-    const newElement: DocumentElement = {
-      id: newId,
-      type: "formula",
-      x: 0.55,
-      y: yPos,
-      width: 7.4,
-      height: 1.35,
-      zIndex: documentState.elements.length + 1,
-      content: {
-        title: eqTitle,
-        equation: eqString,
-        breakdown: eqBreakdown,
-      },
-      style: {
-        backgroundColor: "#f8fafc",
-        borderColor: "#cbd5e1",
-        borderWidth: 1,
-        borderRadius: 8,
-        padding: 12,
-      },
-      metadata: { label: eqTitle },
-    };
-
-    pushToHistory({
-      ...documentState,
-      elements: [...documentState.elements, newElement],
-    });
-    setSelectedElementId(newId);
-  }, [documentState, pushToHistory]);
-
-  // Insert Element by type from Menu
-  const handleInsertElement = useCallback((type: string) => {
-    const newId = `el-${type}-${Date.now()}`;
-    const lastEl = documentState.elements[documentState.elements.length - 1];
-    const yPos = lastEl ? Math.min(9.0, lastEl.y + lastEl.height + 0.15) : 3.0;
-
-    let newElement: DocumentElement;
-    if (type === "table") {
-      newElement = {
-        id: newId,
-        type: "table",
-        x: 0.55,
-        y: yPos,
-        width: 7.4,
-        height: 1.6,
-        zIndex: documentState.elements.length + 1,
-        content: {
-          title: "Data Matrix",
-          headers: ["Parameter", "Formula", "Description"],
-          rows: [
-            ["Derivation", "$f'(x) = \\lim_{h \\to 0} \\frac{f(x+h)-f(x)}{h}$", "Instantaneous rate of change"],
-            ["Integral", "$\\int f(x) dx = F(x) + C$", "Accumulation / area under curve"],
-          ],
-        },
-        style: { backgroundColor: "#ffffff", borderColor: "#e2e8f0", borderWidth: 1, borderRadius: 8, padding: 10 },
+    if (mode === "presentation") {
+      // 16:9 Slide Dimensions
+      updatedDoc.page = {
+        ...updatedDoc.page,
+        size: "presentation-16-9",
+        width: 13.333,
+        height: 7.5,
+        safeMargin: 0.5,
       };
-    } else if (type === "callout") {
-      newElement = {
-        id: newId,
-        type: "callout",
-        x: 0.55,
-        y: yPos,
-        width: 7.4,
-        height: 1.1,
-        zIndex: documentState.elements.length + 1,
-        content: {
-          title: "Fundamental Concept",
-          body: "Continuous mathematical models provide analytical precision when analyzing complex systems.",
-        },
-        style: { backgroundColor: "#f0fdf4", borderColor: "#86efac", borderWidth: 1, borderRadius: 8, padding: 12 },
-      };
+      setZoom(0.75);
     } else {
-      newElement = {
-        id: newId,
-        type: "text",
-        x: 0.55,
-        y: yPos,
-        width: 7.4,
-        height: 1.1,
-        zIndex: documentState.elements.length + 1,
-        content: "New markdown notes block. Supports **bold**, *italic*, and LaTeX equations like $E=mc^2$ or $$\\sum_{i=1}^n x_i$$.",
-        style: { fontSize: 14, color: "#334155", lineHeight: 1.5 },
+      // US Letter Standard
+      updatedDoc.page = {
+        ...updatedDoc.page,
+        size: "letter",
+        width: 8.5,
+        height: 11.0,
+        safeMargin: 0.45,
       };
+      setZoom(0.85);
     }
 
-    pushToHistory({
-      ...documentState,
-      elements: [...documentState.elements, newElement],
-    });
-    setSelectedElementId(newId);
-  }, [documentState, pushToHistory]);
+    pushToHistory(updatedDoc);
+  };
 
-  // Fit to screen uniform scaling calculation
-  const handleFitToScreen = useCallback(() => {
-    if (!workspaceRef.current) return;
-    const ws = workspaceRef.current;
-    const availableWidth = ws.clientWidth - 64;
-    const availableHeight = ws.clientHeight - 130;
+  // Preset Application
+  const handleApplyPreset = (presetKey: string) => {
+    let newDoc: DocumentModel;
+    if (presetKey === "presentation-deck") {
+      newDoc = JSON.parse(JSON.stringify(SAMPLE_PRESENTATION_DECK));
+      setDocumentMode("presentation");
+      setZoom(0.75);
+    } else if (presetKey === "worksheet-calculus") {
+      newDoc = JSON.parse(JSON.stringify(SAMPLE_WORKSHEET));
+      setDocumentMode("worksheet");
+      setZoom(0.85);
+    } else if (presetKey === "executive-memo") {
+      newDoc = JSON.parse(JSON.stringify(SAMPLE_ONE_PAGER));
+      setDocumentMode("one-pager");
+      setZoom(0.85);
+    } else {
+      newDoc = JSON.parse(JSON.stringify(INITIAL_SAMPLE_DOCUMENT));
+      setDocumentMode("document");
+      setZoom(0.85);
+    }
 
-    const canvasWidthPx = (documentState.page?.width || PAGE_WIDTH_INCHES) * 96;
-    const canvasHeightPx = (documentState.page?.height || PAGE_HEIGHT_INCHES) * 96;
+    setActivePageIndex(0);
+    setSelectedElementId(null);
+    pushToHistory(newDoc);
+  };
 
-    const scaleX = availableWidth / canvasWidthPx;
-    const scaleY = availableHeight / canvasHeightPx;
-    const uniformScale = Math.min(scaleX, scaleY);
-
-    const clampedZoom = Math.max(0.4, Math.min(1.5, Math.round(uniformScale * 100) / 100));
-    setZoom(clampedZoom);
-  }, [documentState.page]);
-
-  // Auto-fit on initial mount
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      handleFitToScreen();
-    }, 150);
-    return () => clearTimeout(timer);
-  }, [handleFitToScreen]);
-
-  // Global Keyboard Shortcuts for Undo / Redo
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement;
-      if (
-        target.tagName === "INPUT" ||
-        target.tagName === "TEXTAREA" ||
-        target.isContentEditable
-      ) {
-        return;
-      }
-
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
-        e.preventDefault();
-        if (e.shiftKey) {
-          handleRedo();
-        } else {
-          handleUndo();
-        }
-      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "y") {
-        e.preventDefault();
-        handleRedo();
-      }
+  // Page Management
+  const handleAddPage = () => {
+    const isPresentation = documentMode === "presentation";
+    const newPage: PageData = {
+      id: `page-${Date.now()}`,
+      title: isPresentation ? `Slide ${currentPages.length + 1}` : `Page ${currentPages.length + 1}`,
+      elements: [
+        {
+          id: `heading-${Date.now()}`,
+          type: "heading",
+          x: isPresentation ? 0.8 : 0.55,
+          y: isPresentation ? 1.0 : 0.55,
+          width: isPresentation ? 11.7 : 7.4,
+          height: 0.85,
+          zIndex: 1,
+          content: {
+            title: isPresentation ? `Slide ${currentPages.length + 1} Title` : `Section ${currentPages.length + 1}`,
+            subtitle: "Add content or insert KaTeX equations, charts, and callouts.",
+          },
+          style: {
+            fontSize: isPresentation ? 28 : 22,
+            fontWeight: 700,
+          },
+        },
+      ],
     };
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleUndo, handleRedo]);
-
-  // Quality Verification Handler
-  const handleCheckPage = () => {
-    const issues = runDeterministicQualityChecks(documentState);
-    setQualityIssues(issues);
-    setIsChatPanelOpen(true);
+    const updated = applyOperations(documentState, [{ action: "addPage", page: newPage }]);
+    pushToHistory(updated);
+    setActivePageIndex(updated.pages!.length - 1);
   };
 
-  // Auto-Repair Safe Margins
-  const handleAutoFixMargins = () => {
-    const fixed = autoFixSafeMargins(documentState);
-    pushToHistory(fixed);
-    setChatMessages((prev) => [
-      ...prev,
-      {
-        sender: "ai",
-        text: "Auto-Repair: Clamped all elements safely inside the 0.45\" print margin boundary.",
-      },
-    ]);
+  const handleDuplicatePage = (index: number) => {
+    const targetPage = currentPages[index];
+    if (!targetPage) return;
+
+    const duplicatedPage: PageData = {
+      id: `page-${Date.now()}`,
+      title: `${targetPage.title || "Page"} (Copy)`,
+      elements: targetPage.elements.map((el) => ({
+        ...JSON.parse(JSON.stringify(el)),
+        id: `el-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      })),
+    };
+
+    const nextPages = [...currentPages];
+    nextPages.splice(index + 1, 0, duplicatedPage);
+    const updated = { ...documentState, pages: nextPages };
+    pushToHistory(updated);
+    setActivePageIndex(index + 1);
   };
 
-  // Auto-Resolve Collisions
-  const handleAutoFixOverlaps = () => {
-    const resolved = autoFixOverlaps(documentState);
-    pushToHistory(resolved);
-    setChatMessages((prev) => [
-      ...prev,
-      {
-        sender: "ai",
-        text: "Auto-Repair: Shifted overlapping elements down to restore visual spacing.",
-      },
-    ]);
+  const handleDeletePage = (index: number) => {
+    if (currentPages.length <= 1) return;
+    const nextPages = currentPages.filter((_, i) => i !== index);
+    const updated = { ...documentState, pages: nextPages };
+    pushToHistory(updated);
+    setActivePageIndex(Math.max(0, index - 1));
   };
 
-  // AI Prompt Interaction via Gemini
-  const handleSendMessage = async (promptText: string) => {
+  const handleMovePage = (fromIndex: number, toIndex: number) => {
+    if (toIndex < 0 || toIndex >= currentPages.length) return;
+    const nextPages = [...currentPages];
+    const [moved] = nextPages.splice(fromIndex, 1);
+    nextPages.splice(toIndex, 0, moved);
+    const updated = { ...documentState, pages: nextPages };
+    pushToHistory(updated);
+    setActivePageIndex(toIndex);
+  };
+
+  // Element Actions
+  const handleUpdateElement = (id: string, changes: Partial<DocumentElement>, pageIndex = activePageIndex) => {
+    const updated = applyOperations(documentState, [{ action: "update", id, changes, pageIndex }]);
+    pushToHistory(updated);
+  };
+
+  const handleDeleteElement = (id: string, pageIndex = activePageIndex) => {
+    const updated = applyOperations(documentState, [{ action: "delete", id, pageIndex }]);
+    if (selectedElementId === id) setSelectedElementId(null);
+    pushToHistory(updated);
+  };
+
+  const handleDuplicateElement = (id: string, pageIndex = activePageIndex) => {
+    const updated = applyOperations(documentState, [{ action: "duplicate", id, pageIndex }]);
+    pushToHistory(updated);
+  };
+
+  const handleReorderElement = (id: string, zIndex: number, pageIndex = activePageIndex) => {
+    const updated = applyOperations(documentState, [{ action: "reorder", id, zIndex, pageIndex }]);
+    pushToHistory(updated);
+  };
+
+  const handleAddElement = (element: DocumentElement, pageIndex = activePageIndex) => {
+    const updated = applyOperations(documentState, [{ action: "add", element, pageIndex }]);
+    pushToHistory(updated);
+    setSelectedElementId(element.id);
+  };
+
+  // AI Chat & Modification API
+  const handleSendMessage = async (prompt: string) => {
+    if (!prompt.trim() || isAiLoading) return;
+
+    setChatMessages((prev) => [...prev, { sender: "user", text: prompt }]);
     setIsAiLoading(true);
-    setIsChatPanelOpen(true); // Auto-open chat panel to show the conversation
-    setChatMessages((prev) => [...prev, { sender: "user", text: promptText }]);
+    setIsAnimating(true);
 
     try {
       const response = await fetch("/api/gemini", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          prompt: promptText,
-          currentDocument: documentState,
+          prompt,
+          documentState,
           selectedElementId,
-          mode: "director",
-          chatHistory: chatMessages,
+          activePageIndex,
+          documentMode,
         }),
       });
 
-      const data = await response.json();
-
-      if (!response.ok && !data.operations) {
-        throw new Error(data.error || "Failed to communicate with layout engine");
+      if (!response.ok) {
+        throw new Error(`AI generation failed: ${response.statusText}`);
       }
 
-      // Apply Operations returned by Gemini / fallback engine
-      if (data.operations && Array.isArray(data.operations)) {
+      const data = await response.json();
+
+      if (data.operations && Array.isArray(data.operations) && data.operations.length > 0) {
         const updatedDoc = applyOperations(documentState, data.operations);
         pushToHistory(updatedDoc);
-
-        // Trigger Construction Animation
-        setIsAnimating(true);
-        setTimeout(() => setIsAnimating(false), 2200);
       }
 
       if (data.designReasoning) {
@@ -352,449 +307,91 @@ export default function PagePilotEditor() {
 
       setChatMessages((prev) => [
         ...prev,
-        { sender: "ai", text: data.message || "Document successfully updated." },
+        {
+          sender: "ai",
+          text: data.message || "Applied design and content updates to the workspace.",
+        },
       ]);
-
-      if (data.qualityChecks?.length) {
-        setQualityIssues(data.qualityChecks);
-      }
     } catch (err: any) {
-      console.error(err);
+      console.error("AI Error:", err);
       setChatMessages((prev) => [
         ...prev,
         {
           sender: "ai",
-          text: `Notice: ${err.message}.`,
+          text: `Could not complete modification: ${err.message || "Unknown error"}.`,
         },
       ]);
     } finally {
       setIsAiLoading(false);
+      setIsAnimating(false);
     }
   };
 
-  const handleQuickAIEdit = (id: string, instruction: string) => {
-    handleSendMessage(`Modify element "${id}": ${instruction}`);
-  };
+  // Export handlers
+  const handleExport = (format: "pdf" | "png" | "json" | "markdown") => {
+    if (format === "pdf") {
+      setIsPrintPreviewOpen(true);
+    } else if (format === "json") {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(documentState, null, 2));
+      const downloadAnchor = document.createElement("a");
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", `${(documentState.title || "document").toLowerCase().replace(/\s+/g, "_")}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+    } else if (format === "markdown") {
+      let md = `# ${documentState.title || "PagePilot Document"}\n\n`;
+      currentPages.forEach((page, pIdx) => {
+        md += `## ${page.title || `Section ${pIdx + 1}`}\n\n`;
+        page.elements.forEach((el) => {
+          if (el.type === "heading") {
+            md += `### ${el.content?.title || ""}\n${el.content?.subtitle ? `*${el.content.subtitle}*\n` : ""}\n`;
+          } else if (el.type === "formula") {
+            md += `$$\n${el.content?.equation || ""}\n$$\n\n`;
+          } else if (el.type === "callout") {
+            md += `> **${el.content?.title || "Key Insight"}**\n> ${el.content?.body || ""}\n\n`;
+          } else if (typeof el.content === "string") {
+            md += `${el.content}\n\n`;
+          }
+        });
+      });
 
-  // AI Architect Direct Layout Redesign
-  const handleAutoDesign = (mode: string) => {
-    if (mode === "chemistry") {
-      const result = buildChemistryMeasurementGuide();
-      pushToHistory(result.document);
-      setDesignReasoning(result.reasoning);
-      setDocumentTitle(result.document.title || "Chemistry Reference Guide");
-      setSelectedElementId(null);
-      setChatMessages((prev) => [
-        ...prev,
-        { sender: "user", text: "Transform to Chemistry Lab Guide" },
-        { sender: "ai", text: result.message },
-      ]);
-      setIsAnimating(true);
-      setTimeout(() => setIsAnimating(false), 2000);
-    } else if (mode === "margins") {
-      handleAutoFixMargins();
-    } else if (mode === "balance") {
-      handleSendMessage("Auto-balance two-column layout and equalize section card heights");
-    } else {
-      // Direct client-side smart architect execution for instant responsiveness
-      const result = autoDesignDocument(documentState);
-      pushToHistory(result.document);
-      setDesignReasoning(result.reasoning);
-      setSelectedElementId(null);
-      setChatMessages((prev) => [
-        ...prev,
-        { sender: "user", text: "Auto-Design Document Layout" },
-        { sender: "ai", text: result.message },
-      ]);
-      setIsAnimating(true);
-      setTimeout(() => setIsAnimating(false), 2000);
+      navigator.clipboard?.writeText(md);
+      alert("Markdown with LaTeX equations copied to clipboard!");
     }
   };
 
-  // Preset Templates
-  const handleApplyPreset = (
-    preset: "compound-interest" | "photosynthesis" | "quiz" | "physics" | "executive" | "chemistry"
-  ) => {
-    if (preset === "chemistry") {
-      handleAutoDesign("chemistry");
-      return;
-    }
-
-    if (preset === "compound-interest") {
-      pushToHistory(INITIAL_SAMPLE_DOCUMENT);
-      setDocumentTitle("Compound Interest Study Guide");
-    } else if (preset === "photosynthesis") {
-      const bioDoc: DocumentModel = {
-        ...INITIAL_SAMPLE_DOCUMENT,
-        elements: [
-          {
-            id: "bio-title",
-            type: "heading",
-            x: 0.55,
-            y: 0.55,
-            width: 7.4,
-            height: 0.8,
-            zIndex: 1,
-            content: {
-              title: "Photosynthesis: Solar Energy to Chemical Bonds",
-              subtitle: "The dual-stage biochemical process powering Earth's biosphere.",
-            },
-          },
-          {
-            id: "bio-equation",
-            type: "formula",
-            x: 0.55,
-            y: 1.45,
-            width: 7.4,
-            height: 1.4,
-            zIndex: 2,
-            content: {
-              equation: "6CO_2 + 6H_2O + photons -> C_6H_{12}O_6 + 6O_2",
-              breakdown: [
-                { symbol: "CO2", label: "Carbon Dioxide (Stomata)" },
-                { symbol: "H2O", label: "Water absorbed by roots" },
-                { symbol: "C6H12O6", label: "Glucose output" },
-                { symbol: "O2", label: "Oxygen byproduct" },
-              ],
-            },
-            style: {
-              backgroundColor: "#f0fdf4",
-              borderColor: "#bbf7d0",
-              borderWidth: 1,
-              borderRadius: 8,
-              padding: 12,
-            },
-          },
-          {
-            id: "bio-diagram",
-            type: "diagram",
-            x: 0.55,
-            y: 3.0,
-            width: 7.4,
-            height: 1.8,
-            zIndex: 2,
-            content: {
-              title: "Reaction Progression",
-              nodes: [
-                { step: "01", title: "Light Phase", desc: "Thylakoid splits H2O to ATP & NADPH" },
-                { step: "02", title: "Calvin Cycle", desc: "Stroma utilizes ATP to fix carbon into G3P" },
-                { step: "03", title: "Sugar Storage", desc: "Polymerized into starch reserves" },
-              ],
-            },
-            style: {
-              backgroundColor: "#fdfbf7",
-              borderColor: "#fde68a",
-              borderWidth: 1,
-              borderRadius: 8,
-              padding: 10,
-            },
-          },
-          {
-            id: "bio-lines",
-            type: "writingLines",
-            x: 0.55,
-            y: 5.0,
-            width: 7.4,
-            height: 5.4,
-            zIndex: 2,
-            content: {
-              title: "Student Synthesis & Comprehension Notes",
-              promptText: "Explain how stomatal closure during drought directly halts the Calvin cycle:",
-              lineCount: 12,
-            },
-            style: {
-              borderColor: "#cbd5e1",
-              borderRadius: 8,
-              borderWidth: 1,
-              backgroundColor: "#ffffff",
-              padding: 12,
-            },
-          },
-        ],
-      };
-      pushToHistory(bioDoc);
-      setDocumentTitle("Photosynthesis Biology One-Pager");
-    } else if (preset === "physics") {
-      const physDoc: DocumentModel = {
-        ...INITIAL_SAMPLE_DOCUMENT,
-        elements: [
-          {
-            id: "phys-title",
-            type: "heading",
-            x: 0.55,
-            y: 0.55,
-            width: 7.4,
-            height: 0.8,
-            zIndex: 1,
-            content: {
-              title: "Classical Kinetics & Trajectory Dynamics",
-              subtitle: "Constant acceleration kinematics and energy conservation principles.",
-            },
-          },
-          {
-            id: "phys-formula",
-            type: "formula",
-            x: 0.55,
-            y: 1.45,
-            width: 4.25,
-            height: 1.6,
-            zIndex: 2,
-            content: {
-              equation: "v^2 = v_0^2 + 2a(x - x_0)",
-              breakdown: [
-                { symbol: "v", label: "Final Velocity (m/s)" },
-                { symbol: "v0", label: "Initial Velocity (m/s)" },
-                { symbol: "a", label: "Constant Acceleration (m/s²)" },
-                { symbol: "Δx", label: "Displacement (meters)" },
-              ],
-            },
-          },
-          {
-            id: "phys-callout",
-            type: "callout",
-            x: 4.95,
-            y: 1.45,
-            width: 3.0,
-            height: 1.6,
-            zIndex: 2,
-            content: {
-              title: "Zero-Time Independence",
-              body: "This equation solves for velocity without requiring elapsed time (t), useful for projectile summits and braking distances.",
-            },
-          },
-          {
-            id: "phys-chart",
-            type: "chart",
-            x: 0.55,
-            y: 3.2,
-            width: 7.4,
-            height: 2.15,
-            zIndex: 2,
-            content: {
-              title: "Parabolic Trajectory: Elevation vs Range (v0 = 30 m/s)",
-              labels: ["0m", "20m", "40m", "60m", "80m", "92m"],
-              series: [
-                { name: "45° Launch", color: "#4f46e5", values: [0, 16.5, 23.0, 21.5, 11.2, 0] },
-                { name: "30° Launch", color: "#64748b", values: [0, 9.8, 14.5, 12.0, 4.0, 0] },
-              ],
-            },
-          },
-          {
-            id: "phys-lines",
-            type: "writingLines",
-            x: 0.55,
-            y: 5.5,
-            width: 4.4,
-            height: 4.95,
-            zIndex: 2,
-            content: {
-              title: "Kinematic Derivation Steps",
-              promptText: "1. Integrate a = dv/dt to find v(t)\n2. Integrate v(t) to find x(t)\n3. Eliminate parameter t:",
-              lineCount: 11,
-            },
-          },
-          {
-            id: "phys-scratch",
-            type: "drawingArea",
-            x: 5.1,
-            y: 5.5,
-            width: 2.85,
-            height: 4.95,
-            zIndex: 2,
-            content: {
-              title: "Free-Body Diagram Frame",
-              promptWatermark: "Draw normal forces and vectors...",
-            },
-          },
-        ],
-      };
-      pushToHistory(physDoc);
-      setDocumentTitle("Physics Motion & Kinetics Sheet");
-    } else if (preset === "quiz") {
-      const quizDoc: DocumentModel = {
-        ...INITIAL_SAMPLE_DOCUMENT,
-        elements: [
-          {
-            id: "quiz-title",
-            type: "heading",
-            x: 0.55,
-            y: 0.55,
-            width: 7.4,
-            height: 0.8,
-            zIndex: 1,
-            content: {
-              title: "Unit Assessment: Exponential Models",
-              subtitle: "Name: ____________________   Date: _________   Score: ___ / 100",
-            },
-          },
-          {
-            id: "quiz-check",
-            type: "checkboxGroup",
-            x: 0.55,
-            y: 1.45,
-            width: 7.4,
-            height: 1.4,
-            zIndex: 2,
-            content: {
-              title: "Part A: Theoretical Fundamentals",
-              items: [
-                { text: "1. Distinguish between simple and compound interest compounding frequencies.", checked: false },
-                { text: "2. State why increasing compounding periods (n -> inf) approaches continuous growth (e^rt).", checked: false },
-                { text: "3. Identify the principal base parameter in standard amortization tables.", checked: false },
-              ],
-            },
-          },
-          {
-            id: "quiz-lines",
-            type: "writingLines",
-            x: 0.55,
-            y: 3.0,
-            width: 7.4,
-            height: 7.45,
-            zIndex: 2,
-            content: {
-              title: "Part B: Multi-Step Word Problem Calculations",
-              promptText: "A principal sum of $2,000 is invested at 7.5% annual interest compounded monthly for 8 years.\nShow all intermediate steps and state your final balance to the nearest cent:",
-              lineCount: 17,
-            },
-          },
-        ],
-      };
-      pushToHistory(quizDoc);
-      setDocumentTitle("Exponential Models Diagnostic Exam");
-    }
-
-    setIsAnimating(true);
-    setTimeout(() => setIsAnimating(false), 2000);
-  };
-
-  // Canvas element update callbacks
-  const handleUpdateElementPosition = (id: string, x: number, y: number) => {
-    const updated = documentState.elements.map((el) => {
-      if (el.id === id) {
-        const clamped = clampPosition(
-          x,
-          y,
-          el.width,
-          el.height,
-          documentState.page?.width,
-          documentState.page?.height
-        );
-        return { ...el, x: clamped.x, y: clamped.y };
-      }
-      return el;
-    });
-    setDocumentState({ ...documentState, elements: updated });
-  };
-
-  const handleUpdateElementDimensions = (
-    id: string,
-    width: number,
-    height: number,
-    x?: number,
-    y?: number
-  ) => {
-    const updated = documentState.elements.map((el) => {
-      if (el.id === id) {
-        const nextX = x !== undefined ? x : el.x;
-        const nextY = y !== undefined ? y : el.y;
-        const clampedDims = clampDimensions(
-          nextX,
-          nextY,
-          width,
-          height,
-          documentState.page?.width,
-          documentState.page?.height
-        );
-        const clampedPos = clampPosition(
-          nextX,
-          nextY,
-          clampedDims.width,
-          clampedDims.height,
-          documentState.page?.width,
-          documentState.page?.height
-        );
-        return {
-          ...el,
-          x: clampedPos.x,
-          y: clampedPos.y,
-          width: clampedDims.width,
-          height: clampedDims.height,
-        };
-      }
-      return el;
-    });
-    setDocumentState({ ...documentState, elements: updated });
-  };
-
-  const handleUpdateElementRotation = (id: string, rotation: number) => {
-    const updated = documentState.elements.map((el) =>
-      el.id === id ? { ...el, rotation } : el
-    );
-    setDocumentState({ ...documentState, elements: updated });
-  };
-
-  const handleDeleteElement = (id: string) => {
-    const filtered = documentState.elements.filter((el) => el.id !== id);
-    setSelectedElementId(null);
-    pushToHistory({ ...documentState, elements: filtered });
-  };
-
-  const handleDuplicateElement = (id: string) => {
-    const target = documentState.elements.find((el) => el.id === id);
-    if (!target) return;
-    const maxZ = documentState.elements.reduce((m, e) => Math.max(m, e.zIndex || 1), 1);
-    const offsetPos = clampPosition(
-      target.x + 0.2,
-      target.y + 0.2,
-      target.width,
-      target.height,
-      documentState.page?.width,
-      documentState.page?.height
-    );
-
-    const dup: DocumentElement = {
-      ...JSON.parse(JSON.stringify(target)),
-      id: `el-${Date.now()}`,
-      x: offsetPos.x,
-      y: offsetPos.y,
-      zIndex: maxZ + 1,
-      metadata: {
-        ...(target.metadata || {}),
-        label: target.metadata?.label ? `${target.metadata.label} (Copy)` : undefined,
-      },
-    };
-
-    pushToHistory({ ...documentState, elements: [...documentState.elements, dup] });
-    setSelectedElementId(dup.id);
-  };
-
-  const handleReorderElement = (id: string, newZIndex: number) => {
-    const updated = documentState.elements.map((el) =>
-      el.id === id ? { ...el, zIndex: newZIndex } : el
-    );
-    pushToHistory({ ...documentState, elements: updated });
-  };
-
+  // Selected element helper
   const selectedElement =
-    documentState.elements.find((el) => el.id === selectedElementId) || null;
+    currentPages[activePageIndex]?.elements?.find((el) => el.id === selectedElementId) ||
+    currentPages.flatMap((p) => p.elements).find((el) => el.id === selectedElementId) ||
+    null;
 
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden bg-slate-950">
-      {/* Top Application Studio Header */}
+    <div className="flex flex-col h-screen w-screen overflow-hidden bg-[#0c0d10] text-zinc-100 font-sans">
+      {/* 1. TOP TOOLBAR NAVIGATION */}
       <StudioHeader
-        title={documentTitle}
-        onTitleChange={setDocumentTitle}
+        title={documentState.title || "Untitled Document"}
+        onTitleChange={(title) => {
+          const updated = { ...documentState, title };
+          pushToHistory(updated);
+        }}
+        documentMode={documentMode}
+        onModeChange={handleModeChange}
+        activePageIndex={activePageIndex}
+        totalPages={currentPages.length}
+        onPrevPage={() => setActivePageIndex(Math.max(0, activePageIndex - 1))}
+        onNextPage={() => setActivePageIndex(Math.min(currentPages.length - 1, activePageIndex + 1))}
         canUndo={historyIndex > 0}
         canRedo={historyIndex < history.length - 1}
         onUndo={handleUndo}
         onRedo={handleRedo}
         zoom={zoom}
         onZoomChange={setZoom}
-        onFitToScreen={handleFitToScreen}
-        onPrint={triggerPrint}
+        onFitToScreen={() => setZoom(documentMode === "presentation" ? 0.75 : 0.85)}
+        onPrint={() => triggerPrint()}
         onOpenPrintPreview={() => setIsPrintPreviewOpen(true)}
-        onCheckPage={handleCheckPage}
+        onCheckPage={() => setIsChatPanelOpen(true)}
         issueCount={qualityIssues.length}
         isBlackAndWhite={isBlackAndWhite}
         onToggleBW={() => setIsBlackAndWhite(!isBlackAndWhite)}
@@ -803,121 +400,134 @@ export default function PagePilotEditor() {
         isPreviewMode={isPreviewMode}
         onTogglePreview={() => setIsPreviewMode(!isPreviewMode)}
         onOpenMarkdownMathModal={() => setIsMarkdownMathOpen(true)}
-        onInsertEquation={handleInsertEquation}
-        onInsertElement={handleInsertElement}
-        onAutoDesign={handleAutoDesign}
+        onExport={handleExport}
       />
 
-      {/* Main Workspace with Left Sidebar, Document Canvas, and Right Inspector */}
-      <div className="flex flex-1 overflow-hidden relative">
-        {/* Left Component Library & Document Outline */}
+      {/* 2. MAIN 3-PANEL WORKSPACE */}
+      <div className="flex flex-1 min-h-0 relative overflow-hidden">
+        {/* Left Sidebar: Pages, Outline, Insert, Templates */}
         {!isPreviewMode && (
           <LeftSidebar
             document={documentState}
+            documentMode={documentMode}
+            activePageIndex={activePageIndex}
+            onSelectPageIndex={setActivePageIndex}
+            onAddPage={handleAddPage}
+            onDuplicatePage={handleDuplicatePage}
+            onDeletePage={handleDeletePage}
+            onMovePage={handleMovePage}
             selectedElementId={selectedElementId}
             onSelectElement={setSelectedElementId}
-            onAddElement={(el) =>
-              pushToHistory({
-                ...documentState,
-                elements: [...documentState.elements, el],
-              })
-            }
-            onApplyTemplate={handleApplyPreset}
-            onAutoDesign={handleAutoDesign}
-            designReasoning={designReasoning}
+            onAddElement={handleAddElement}
+            onApplyPreset={handleApplyPreset}
           />
         )}
 
-        {/* Central Document Workspace Canvas */}
-        <main
-          ref={workspaceRef}
-          className="flex-1 overflow-auto relative bg-slate-950/95 flex flex-col items-center py-6 px-4"
-        >
-          <DocumentCanvas
-            document={documentState}
-            zoom={zoom}
-            selectedElementId={selectedElementId}
-            onSelectElement={setSelectedElementId}
-            onUpdateElementPosition={handleUpdateElementPosition}
-            onUpdateElementDimensions={handleUpdateElementDimensions}
-            onUpdateElementRotation={handleUpdateElementRotation}
-            onDeleteElement={handleDeleteElement}
-            onDuplicateElement={handleDuplicateElement}
-            isBlackAndWhite={isBlackAndWhite}
-            showMargins={showMargins}
-            onToggleMargins={() => setShowMargins(!showMargins)}
-            isPreviewMode={isPreviewMode}
-            isAnimating={isAnimating}
-          />
-        </main>
+        {/* Center: Document & Slide Canvas */}
+        <DocumentCanvas
+          document={documentState}
+          documentMode={documentMode}
+          activePageIndex={activePageIndex}
+          onSelectPageIndex={setActivePageIndex}
+          onAddPage={handleAddPage}
+          zoom={zoom}
+          selectedElementId={selectedElementId}
+          onSelectElement={setSelectedElementId}
+          onUpdateElementPosition={(id, x, y, pIdx) =>
+            handleUpdateElement(id, { x, y }, pIdx ?? activePageIndex)
+          }
+          onUpdateElementDimensions={(id, width, height, x, y, pIdx) => {
+            const changes: Partial<DocumentElement> = { width, height };
+            if (x !== undefined) changes.x = x;
+            if (y !== undefined) changes.y = y;
+            handleUpdateElement(id, changes, pIdx ?? activePageIndex);
+          }}
+          onUpdateElementRotation={(id, rotation, pIdx) =>
+            handleUpdateElement(id, { rotation }, pIdx ?? activePageIndex)
+          }
+          onDeleteElement={handleDeleteElement}
+          onDuplicateElement={handleDuplicateElement}
+          isBlackAndWhite={isBlackAndWhite}
+          showMargins={showMargins}
+          onToggleMargins={() => setShowMargins(!showMargins)}
+          isPreviewMode={isPreviewMode}
+          isAnimating={isAnimating}
+        />
 
-        {/* Right Inspector & Page Setup */}
+        {/* Right Inspector: Element Properties & Page Setup */}
         {!isPreviewMode && (
           <RightInspector
+            document={documentState}
             selectedElement={selectedElement}
-            documentModel={documentState}
-            onUpdateElement={(id, changes) => {
-              const updated = documentState.elements.map((el) =>
-                el.id === id ? { ...el, ...changes } : el
-              );
-              pushToHistory({ ...documentState, elements: updated });
+            onUpdateElement={(id, changes) => handleUpdateElement(id, changes, activePageIndex)}
+            onDeleteElement={(id) => handleDeleteElement(id, activePageIndex)}
+            onDuplicateElement={(id) => handleDuplicateElement(id, activePageIndex)}
+            onReorderElement={(id, zIndex) => handleReorderElement(id, zIndex, activePageIndex)}
+            onUpdateDocumentPage={(changes) => {
+              const updated = {
+                ...documentState,
+                page: { ...documentState.page, ...changes },
+              };
+              pushToHistory(updated);
             }}
-            onDeleteElement={handleDeleteElement}
-            onDuplicateElement={handleDuplicateElement}
-            onReorderElement={handleReorderElement}
-            onUpdatePageSettings={(settings) =>
-              pushToHistory({
+            onUpdateDocumentTheme={(changes) => {
+              const updated = {
                 ...documentState,
-                page: { ...documentState.page, ...settings },
-              })
-            }
-            onUpdateTheme={(theme) =>
-              pushToHistory({
-                ...documentState,
-                theme: { ...documentState.theme, ...theme },
-              })
-            }
-            onAIQuickEdit={handleQuickAIEdit}
-            isAiLoading={isAiLoading}
-            isBlackAndWhite={isBlackAndWhite}
-            onToggleBW={() => setIsBlackAndWhite(!isBlackAndWhite)}
+                theme: { ...documentState.theme, ...changes },
+              };
+              pushToHistory(updated);
+            }}
+            onModeChange={handleModeChange}
             showMargins={showMargins}
             onToggleMargins={() => setShowMargins(!showMargins)}
+            isBlackAndWhite={isBlackAndWhite}
+            onToggleBW={() => setIsBlackAndWhite(!isBlackAndWhite)}
+            onTriggerAIModification={(elemId, promptText) => {
+              handleSendMessage(`For element ${elemId}: ${promptText}`);
+            }}
           />
         )}
       </div>
 
-      {/* Generation Construction Animation Indicator */}
-      <GenerationAnimation
-        isAnimating={isAnimating}
-        onSkip={() => setIsAnimating(false)}
-      />
-
-      {/* Floating AI Command Pill */}
+      {/* 3. FLOATING AI INPUT BAR (BOTTOM CENTER) */}
       {!isPreviewMode && (
         <FloatingChatBar
           onSendMessage={handleSendMessage}
           isLoading={isAiLoading}
           onOpenExpandedPanel={() => setIsChatPanelOpen(!isChatPanelOpen)}
           isExpanded={isChatPanelOpen}
+          selectedElementLabel={selectedElement?.metadata?.label || selectedElement?.type}
+          documentMode={documentMode}
+          activePageIndex={activePageIndex}
         />
       )}
 
-      {/* Expanded AI Co-Pilot & Quality Audit Drawer */}
+      {/* 4. EXPANDABLE COPILOT & QUALITY AUDIT DRAWER */}
       <ChatPanel
         isOpen={isChatPanelOpen}
-        onClose={() => setIsChatPanelOpen(false)}
         messages={chatMessages}
+        onSendMessage={handleSendMessage}
+        isAiLoading={isAiLoading}
+        onClose={() => setIsChatPanelOpen(false)}
         qualityIssues={qualityIssues}
         designReasoning={designReasoning}
-        isAiLoading={isAiLoading}
-        onAutoFixMargins={handleAutoFixMargins}
-        onAutoFixOverlaps={handleAutoFixOverlaps}
-        onSendMessage={handleSendMessage}
-        onTransformDocument={handleAutoDesign}
+        onAutoFixMargins={() => {
+          const fixedDoc = autoFixSafeMargins(documentState);
+          pushToHistory(fixedDoc);
+        }}
+        onAutoFixOverlaps={() => {
+          const fixedDoc = autoFixOverlaps(documentState);
+          pushToHistory(fixedDoc);
+        }}
       />
 
-      {/* High-Fidelity Print & PDF Preview Modal */}
+      {/* 5. GENERATION ANIMATION OVERLAY */}
+      <GenerationAnimation
+        isAnimating={isAnimating}
+        onSkip={() => setIsAnimating(false)}
+      />
+
+      {/* 6. PRINT PREVIEW MODAL */}
       <PrintPreviewModal
         isOpen={isPrintPreviewOpen}
         onClose={() => setIsPrintPreviewOpen(false)}
@@ -926,17 +536,11 @@ export default function PagePilotEditor() {
         onToggleBW={() => setIsBlackAndWhite(!isBlackAndWhite)}
       />
 
-      {/* Markdown to Math Publication Engine Modal */}
+      {/* 7. MARKDOWN + LATEX MODAL */}
       <MarkdownMathModal
         isOpen={isMarkdownMathOpen}
         onClose={() => setIsMarkdownMathOpen(false)}
-        onApplyDocument={(newDoc) => {
-          pushToHistory(newDoc);
-          if (newDoc.title) {
-            setDocumentTitle(newDoc.title);
-          }
-          setSelectedElementId(null);
-        }}
+        onApplyDocument={(newDoc) => pushToHistory(newDoc)}
       />
     </div>
   );

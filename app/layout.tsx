@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "PagePilot — AI Visual Document Editor",
-  description: "Create polished, printable, editable 8.5x11 documents with Gemini",
+  title: "PagePilot — Professional AI Document & Slide Workspace",
+  description: "Professional AI document & slide creation workspace with KaTeX math and layout intelligence",
 };
 
 export default function RootLayout({

@@ -1,83 +1,77 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
-  Sparkles,
   X,
-  ShieldAlert,
-  ShieldCheck,
-  AlertTriangle,
-  Info,
-  Wand2,
-  CheckCircle2,
   ArrowUp,
   Bot,
   User,
-  Layout,
-  Layers,
-  Palette,
-  Type,
+  ShieldCheck,
+  ShieldAlert,
+  AlertTriangle,
+  Info,
+  CheckCircle2,
   Check,
+  Layout,
+  Type,
+  Palette,
+  Wand2,
+  FlaskConical,
+  GraduationCap,
+  Briefcase,
 } from "lucide-react";
 import { QualityCheckIssue, DesignReasoning } from "@/types/document";
 
-interface ChatMessage {
-  sender: "user" | "ai";
-  text: string;
-}
-
 interface ChatPanelProps {
-  isOpen: boolean;
+  isOpen?: boolean;
+  messages: Array<{ sender: "user" | "ai"; text: string }>;
+  onSendMessage: (msg: string) => void;
+  isAiLoading: boolean;
   onClose: () => void;
-  messages: ChatMessage[];
-  qualityIssues: QualityCheckIssue[];
+  qualityIssues?: QualityCheckIssue[];
   designReasoning?: DesignReasoning;
-  isAiLoading?: boolean;
+  onTransformDocument?: (archetype: string) => void;
   onAutoFixMargins?: () => void;
   onAutoFixOverlaps?: () => void;
-  onSendMessage?: (prompt: string) => void;
-  onTransformDocument?: (archetype: string) => void;
 }
 
 export const ChatPanel: React.FC<ChatPanelProps> = ({
-  isOpen,
-  onClose,
+  isOpen = true,
   messages,
-  qualityIssues,
+  onSendMessage,
+  isAiLoading,
+  onClose,
+  qualityIssues = [],
   designReasoning,
-  isAiLoading = false,
+  onTransformDocument,
   onAutoFixMargins,
   onAutoFixOverlaps,
-  onSendMessage,
-  onTransformDocument,
 }) => {
   const [activeTab, setActiveTab] = useState<"chat" | "design" | "check">("chat");
   const [inputValue, setInputValue] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Auto-scroll to latest message
+  if (!isOpen) return null;
+
+  const errors = qualityIssues.filter((q) => q.severity === "error");
+  const warnings = qualityIssues.filter((q) => q.severity === "warning");
+  const infos = qualityIssues.filter((q) => q.severity === "info");
+
   useEffect(() => {
     if (activeTab === "chat") {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-  }, [messages, activeTab, isAiLoading]);
+  }, [messages, activeTab]);
 
-  // Focus input when panel opens
   useEffect(() => {
-    if (isOpen && activeTab === "chat") {
-      setTimeout(() => inputRef.current?.focus(), 150);
+    if (activeTab === "chat") {
+      inputRef.current?.focus();
     }
-  }, [isOpen, activeTab]);
-
-  if (!isOpen) return null;
-
-  const errors = qualityIssues.filter((i) => i.severity === "error");
-  const warnings = qualityIssues.filter((i) => i.severity === "warning");
-  const infos = qualityIssues.filter((i) => i.severity === "info");
+  }, [activeTab]);
 
   const handleSend = () => {
-    if (!inputValue.trim() || isAiLoading || !onSendMessage) return;
+    if (!inputValue.trim() || isAiLoading) return;
     onSendMessage(inputValue.trim());
     setInputValue("");
   };
@@ -90,37 +84,38 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   };
 
   return (
-    <div className="no-print fixed bottom-24 left-1/2 -translate-x-1/2 w-full max-w-2xl bg-white border border-slate-200/90 rounded-2xl shadow-2xl z-40 flex flex-col animate-in fade-in slide-in-from-bottom-3 duration-200 select-none overflow-hidden"
-      style={{ maxHeight: "calc(100vh - 180px)", minHeight: "420px" }}>
-      
+    <div
+      className="no-print fixed bottom-24 left-1/2 -translate-x-1/2 w-full max-w-2xl bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl z-40 flex flex-col animate-in fade-in slide-in-from-bottom-3 duration-200 select-none overflow-hidden text-zinc-100"
+      style={{ maxHeight: "calc(100vh - 180px)", minHeight: "420px" }}
+    >
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 shrink-0 bg-white">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 shrink-0 bg-zinc-950">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-sm">
-            <Sparkles className="w-3.5 h-3.5 text-white" />
+          <div className="w-7 h-7 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center">
+            <Wand2 className="w-3.5 h-3.5 text-zinc-200" />
           </div>
           <div>
-            <h4 className="text-sm font-bold text-slate-800 leading-none">PagePilot AI</h4>
-            <p className="text-[10px] text-indigo-500 font-medium mt-0.5">
-              {isAiLoading ? "Thinking..." : "Powered by Gemini"}
+            <h4 className="text-xs font-semibold text-zinc-100 leading-none">PagePilot AI</h4>
+            <p className="text-[10px] text-zinc-400 mt-0.5">
+              {isAiLoading ? "Optimizing document..." : "Document Co-Pilot"}
             </p>
           </div>
         </div>
 
         {/* Tab Controls */}
-        <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg text-xs font-medium">
+        <div className="flex items-center gap-1 bg-zinc-900 p-0.5 rounded-lg text-xs font-medium border border-zinc-800">
           <button
             onClick={() => setActiveTab("chat")}
             className={`px-3 py-1 rounded-md transition-all flex items-center gap-1.5 ${
               activeTab === "chat"
-                ? "bg-white text-indigo-700 shadow-sm font-semibold"
-                : "text-slate-600 hover:text-slate-900"
+                ? "bg-zinc-800 text-white shadow-xs font-semibold"
+                : "text-zinc-400 hover:text-zinc-200"
             }`}
           >
             <Bot className="w-3 h-3" />
-            <span>Chat</span>
+            <span>Messages</span>
             {messages.length > 1 && (
-              <span className="px-1.5 bg-indigo-100 text-indigo-700 text-[10px] font-bold rounded-full">
+              <span className="px-1.5 bg-zinc-700 text-zinc-200 text-[10px] font-mono rounded-full">
                 {messages.length}
               </span>
             )}
@@ -130,14 +125,14 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             onClick={() => setActiveTab("design")}
             className={`px-3 py-1 rounded-md transition-all flex items-center gap-1.5 ${
               activeTab === "design"
-                ? "bg-white text-indigo-700 shadow-sm font-semibold"
-                : "text-slate-600 hover:text-slate-900"
+                ? "bg-zinc-800 text-white shadow-xs font-semibold"
+                : "text-zinc-400 hover:text-zinc-200"
             }`}
           >
-            <Sparkles className="w-3 h-3 text-indigo-500" />
-            <span>AI Design Logic</span>
+            <Layout className="w-3 h-3" />
+            <span>Layout Logic</span>
             {designReasoning && (
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
             )}
           </button>
 
@@ -145,14 +140,14 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             onClick={() => setActiveTab("check")}
             className={`px-3 py-1 rounded-md transition-all flex items-center gap-1.5 ${
               activeTab === "check"
-                ? "bg-white text-indigo-700 shadow-sm font-semibold"
-                : "text-slate-600 hover:text-slate-900"
+                ? "bg-zinc-800 text-white shadow-xs font-semibold"
+                : "text-zinc-400 hover:text-zinc-200"
             }`}
           >
             <ShieldCheck className="w-3 h-3" />
-            <span>Page Check</span>
+            <span>Print Audit</span>
             {qualityIssues.length > 0 && (
-              <span className="px-1.5 bg-amber-500 text-white text-[10px] font-bold rounded-full">
+              <span className="px-1.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-mono rounded-full">
                 {qualityIssues.length}
               </span>
             )}
@@ -161,14 +156,14 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 
         <button
           onClick={onClose}
-          className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors"
+          className="p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-900 transition-colors"
         >
           <X className="w-4 h-4" />
         </button>
       </div>
 
       {/* Body */}
-      <div className="flex-1 overflow-y-auto min-h-0">
+      <div className="flex-1 overflow-y-auto min-h-0 bg-zinc-950">
         {activeTab === "chat" ? (
           <div className="flex flex-col h-full">
             {/* Messages */}
@@ -176,25 +171,26 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
               {messages.map((m, i) => (
                 <div
                   key={i}
-                  className={`flex gap-2 ${m.sender === "user" ? "flex-row-reverse" : "flex-row"}`}
+                  className={`flex gap-2.5 ${m.sender === "user" ? "flex-row-reverse" : "flex-row"}`}
                 >
-                  {/* Avatar */}
-                  <div className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-sm ${
-                    m.sender === "ai"
-                      ? "bg-gradient-to-br from-indigo-500 to-violet-600"
-                      : "bg-slate-700"
-                  }`}>
-                    {m.sender === "ai"
-                      ? <Sparkles className="w-3.5 h-3.5" />
-                      : <User className="w-3.5 h-3.5" />
-                    }
-                  </div>
-                  {/* Bubble */}
                   <div
-                    className={`max-w-[78%] text-xs leading-relaxed px-3.5 py-2.5 rounded-2xl ${
+                    className={`shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-xs font-medium ${
+                      m.sender === "ai"
+                        ? "bg-zinc-850 border border-zinc-700 text-zinc-200"
+                        : "bg-zinc-800 text-zinc-200"
+                    }`}
+                  >
+                    {m.sender === "ai" ? (
+                      <Wand2 className="w-3.5 h-3.5" />
+                    ) : (
+                      <User className="w-3.5 h-3.5" />
+                    )}
+                  </div>
+                  <div
+                    className={`max-w-[80%] text-xs leading-relaxed px-3.5 py-2.5 rounded-xl ${
                       m.sender === "user"
-                        ? "bg-indigo-600 text-white rounded-tr-sm shadow-sm font-medium"
-                        : "bg-slate-50 text-slate-800 rounded-tl-sm border border-slate-200/60"
+                        ? "bg-zinc-800 text-zinc-100 rounded-tr-xs border border-zinc-750"
+                        : "bg-zinc-900 text-zinc-200 rounded-tl-xs border border-zinc-800"
                     }`}
                   >
                     {m.text}
@@ -202,16 +198,15 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                 </div>
               ))}
 
-              {/* Typing indicator */}
               {isAiLoading && (
-                <div className="flex gap-2 flex-row">
-                  <div className="shrink-0 w-7 h-7 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-sm">
-                    <Sparkles className="w-3.5 h-3.5 text-white animate-pulse" />
+                <div className="flex gap-2.5 flex-row">
+                  <div className="shrink-0 w-7 h-7 rounded-lg bg-zinc-850 border border-zinc-700 flex items-center justify-center text-zinc-200">
+                    <Wand2 className="w-3.5 h-3.5 animate-spin" />
                   </div>
-                  <div className="bg-slate-50 border border-slate-200/60 rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: "0ms" }} />
-                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: "150ms" }} />
-                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: "300ms" }} />
+                  <div className="bg-zinc-900 border border-zinc-800 rounded-xl rounded-tl-xs px-4 py-3 flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-zinc-400 animate-bounce" style={{ animationDelay: "0ms" }} />
+                    <span className="w-1.5 h-1.5 rounded-full bg-zinc-400 animate-bounce" style={{ animationDelay: "150ms" }} />
+                    <span className="w-1.5 h-1.5 rounded-full bg-zinc-400 animate-bounce" style={{ animationDelay: "300ms" }} />
                   </div>
                 </div>
               )}
@@ -220,8 +215,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             </div>
 
             {/* Chat Input */}
-            <div className="shrink-0 px-3 pb-3 pt-2 border-t border-slate-100 bg-white">
-              <div className="flex items-end gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-100 transition-all">
+            <div className="shrink-0 px-3 pb-3 pt-2 border-t border-zinc-800 bg-zinc-950">
+              <div className="flex items-end gap-2 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 focus-within:border-zinc-700 transition-all">
                 <textarea
                   ref={inputRef}
                   rows={1}
@@ -229,68 +224,69 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                   onChange={(e) => setInputValue(e.target.value)}
                   onKeyDown={handleKeyDown}
                   disabled={isAiLoading}
-                  placeholder="Ask PagePilot anything, or describe changes you want..."
-                  className="flex-1 bg-transparent text-xs text-slate-800 placeholder-slate-400 outline-none resize-none max-h-24 leading-relaxed py-0.5 disabled:opacity-60"
+                  placeholder="Ask PagePilot or specify a layout adjustment..."
+                  className="flex-1 bg-transparent text-xs text-zinc-100 placeholder:text-zinc-500 outline-none resize-none max-h-24 leading-relaxed py-0.5 disabled:opacity-60"
                 />
                 <button
                   onClick={handleSend}
                   disabled={!inputValue.trim() || isAiLoading}
-                  className="shrink-0 w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center hover:bg-indigo-700 disabled:opacity-40 disabled:hover:bg-indigo-600 transition-all shadow-sm"
+                  className="shrink-0 w-7 h-7 rounded-lg bg-zinc-100 text-zinc-950 flex items-center justify-center hover:bg-white disabled:opacity-30 transition-all font-medium"
                 >
                   <ArrowUp className="w-3.5 h-3.5" />
                 </button>
               </div>
-              <p className="text-[10px] text-slate-400 mt-1.5 text-center">
-                Enter to send · Shift+Enter for new line
+              <p className="text-[10px] text-zinc-500 mt-1.5 text-center font-mono">
+                Press Enter to send · Shift+Enter for newline
               </p>
             </div>
           </div>
         ) : activeTab === "design" ? (
-          /* AI Design Logic & Architectural Reasoning Tab */
+          /* AI Design Logic Tab */
           <div className="p-4 space-y-4">
-            {/* Archetype Quick Action Banner */}
-            <div className="p-3.5 bg-gradient-to-br from-indigo-50/90 via-violet-50/50 to-white border border-indigo-100 rounded-xl shadow-2xs">
+            <div className="p-3.5 bg-zinc-900 border border-zinc-800 rounded-xl">
               <div className="flex items-center justify-between mb-1.5">
-                <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-950">
-                  <Sparkles className="w-4 h-4 text-indigo-600" />
-                  <span>AI Design Architect Engine</span>
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-zinc-100">
+                  <Layout className="w-3.5 h-3.5 text-zinc-300" />
+                  <span>Layout Architecture</span>
                 </div>
-                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300 border border-zinc-700">
                   Active
                 </span>
               </div>
-              <p className="text-xs text-slate-600 leading-relaxed mb-3">
-                PagePilot reasons holistically through document semantics, KaTeX math formulas, optical balance, and print boundaries.
+              <p className="text-xs text-zinc-400 leading-relaxed mb-3">
+                Select a structural paradigm or let PagePilot balance the grid automatically.
               </p>
 
-              {/* Archetype One-Click Buttons */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <button
                   onClick={() => onTransformDocument?.("chemistry")}
-                  className="px-2.5 py-2 rounded-lg bg-white border border-emerald-200 hover:border-emerald-400 hover:bg-emerald-50/50 text-left transition-all shadow-2xs group"
+                  className="px-2.5 py-2 rounded-lg bg-zinc-950 border border-zinc-800 hover:border-zinc-700 text-left transition-colors"
                 >
-                  <div className="text-xs font-bold text-emerald-800 flex items-center gap-1">
-                    <span>🧪</span> Chem Lab Guide
+                  <div className="text-xs font-medium text-zinc-100 flex items-center gap-1.5">
+                    <FlaskConical className="w-3.5 h-3.5 text-zinc-300" />
+                    <span>Lab Guide</span>
                   </div>
-                  <div className="text-[10px] text-slate-500 mt-0.5">Bento + LaTeX $D=m/V$</div>
+                  <div className="text-[10px] text-zinc-400 mt-0.5">Bento + LaTeX formula</div>
                 </button>
                 <button
                   onClick={() => onTransformDocument?.("academic")}
-                  className="px-2.5 py-2 rounded-lg bg-white border border-indigo-200 hover:border-indigo-400 hover:bg-indigo-50/50 text-left transition-all shadow-2xs group"
+                  className="px-2.5 py-2 rounded-lg bg-zinc-950 border border-zinc-800 hover:border-zinc-700 text-left transition-colors"
                 >
-                  <div className="text-xs font-bold text-indigo-800 flex items-center gap-1">
-                    <span>🏛️</span> Academic Paper
+                  <div className="text-xs font-medium text-zinc-100 flex items-center gap-1.5">
+                    <GraduationCap className="w-3.5 h-3.5 text-zinc-300" />
+                    <span>Academic Paper</span>
                   </div>
-                  <div className="text-[10px] text-slate-500 mt-0.5">Dual-column balance</div>
+                  <div className="text-[10px] text-zinc-400 mt-0.5">Dual-column balance</div>
                 </button>
                 <button
                   onClick={() => onTransformDocument?.("executive")}
-                  className="px-2.5 py-2 rounded-lg bg-white border border-slate-200 hover:border-slate-400 hover:bg-slate-50 text-left transition-all shadow-2xs group"
+                  className="px-2.5 py-2 rounded-lg bg-zinc-950 border border-zinc-800 hover:border-zinc-700 text-left transition-colors"
                 >
-                  <div className="text-xs font-bold text-slate-800 flex items-center gap-1">
-                    <span>💼</span> Executive Brief
+                  <div className="text-xs font-medium text-zinc-100 flex items-center gap-1.5">
+                    <Briefcase className="w-3.5 h-3.5 text-zinc-300" />
+                    <span>Executive Brief</span>
                   </div>
-                  <div className="text-[10px] text-slate-500 mt-0.5">Structured summaries</div>
+                  <div className="text-[10px] text-zinc-400 mt-0.5">Structured summary</div>
                 </button>
               </div>
             </div>
@@ -298,153 +294,137 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             {/* Design Reasoning Breakdown */}
             {designReasoning ? (
               <div className="space-y-3">
-                {/* 1. Document Identity Card */}
-                <div className="border border-slate-200 rounded-xl p-3.5 bg-white shadow-2xs">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                <div className="border border-zinc-800 rounded-xl p-3.5 bg-zinc-900">
+                  <div className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 mb-1">
                     Document Archetype
                   </div>
-                  <div className="text-sm font-bold text-slate-800">
+                  <div className="text-sm font-semibold text-zinc-100">
                     {designReasoning.documentType}
                   </div>
                 </div>
 
-                {/* 2. Grid & Geometry Card */}
-                <div className="border border-slate-200 rounded-xl p-3.5 bg-white shadow-2xs space-y-2">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
-                    <Layout className="w-3.5 h-3.5 text-indigo-600" />
+                <div className="border border-zinc-800 rounded-xl p-3.5 bg-zinc-900 space-y-2">
+                  <div className="flex items-center gap-1.5 text-xs font-medium text-zinc-200">
+                    <Layout className="w-3.5 h-3.5 text-zinc-400" />
                     <span>Grid & Optical Geometry</span>
                   </div>
-                  <p className="text-xs text-slate-600 leading-relaxed font-mono text-[11px] bg-slate-50 p-2 rounded border border-slate-100">
+                  <p className="text-xs text-zinc-300 leading-relaxed font-mono text-[11px] bg-zinc-950 p-2 rounded border border-zinc-800">
                     {designReasoning.gridSystem}
                   </p>
                 </div>
 
-                {/* 3. Typography & Modular Scale Card */}
-                <div className="border border-slate-200 rounded-xl p-3.5 bg-white shadow-2xs space-y-2">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
-                    <Type className="w-3.5 h-3.5 text-indigo-600" />
+                <div className="border border-zinc-800 rounded-xl p-3.5 bg-zinc-900 space-y-2">
+                  <div className="flex items-center gap-1.5 text-xs font-medium text-zinc-200">
+                    <Type className="w-3.5 h-3.5 text-zinc-400" />
                     <span>Typography Pairing & Scale</span>
                   </div>
-                  <p className="text-xs text-slate-600 leading-relaxed font-mono text-[11px] bg-slate-50 p-2 rounded border border-slate-100">
+                  <p className="text-xs text-zinc-300 leading-relaxed font-mono text-[11px] bg-zinc-950 p-2 rounded border border-zinc-800">
                     {designReasoning.typographyPairing}
                   </p>
                 </div>
 
-                {/* 4. Color Palette & Harmony Card */}
-                <div className="border border-slate-200 rounded-xl p-3.5 bg-white shadow-2xs space-y-2">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
-                    <Palette className="w-3.5 h-3.5 text-indigo-600" />
-                    <span>Color Palette & Contrast</span>
+                <div className="border border-zinc-800 rounded-xl p-3.5 bg-zinc-900 space-y-2">
+                  <div className="flex items-center gap-1.5 text-xs font-medium text-zinc-200">
+                    <Palette className="w-3.5 h-3.5 text-zinc-400" />
+                    <span>Color Palette</span>
                   </div>
-                  <p className="text-xs text-slate-600 leading-relaxed font-mono text-[11px] bg-slate-50 p-2 rounded border border-slate-100">
+                  <p className="text-xs text-zinc-300 leading-relaxed font-mono text-[11px] bg-zinc-950 p-2 rounded border border-zinc-800">
                     {designReasoning.colorPalette}
                   </p>
                 </div>
 
-                {/* 5. Semantic Decisions List */}
-                <div className="border border-emerald-200 rounded-xl p-3.5 bg-emerald-50/40 shadow-2xs space-y-2">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-900">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                    <span>Semantic Synthesized Decisions ({designReasoning.semanticComponents.length})</span>
+                {designReasoning.semanticComponents?.length > 0 && (
+                  <div className="border border-zinc-800 rounded-xl p-3.5 bg-zinc-900 space-y-2">
+                    <div className="flex items-center gap-1.5 text-xs font-medium text-zinc-200">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Synthesized Elements ({designReasoning.semanticComponents.length})</span>
+                    </div>
+                    <ul className="space-y-1.5">
+                      {designReasoning.semanticComponents.map((item, idx) => (
+                        <li key={idx} className="flex items-start gap-2 text-xs text-zinc-300 bg-zinc-950 p-2 rounded-lg border border-zinc-800">
+                          <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
-                  <ul className="space-y-1.5">
-                    {designReasoning.semanticComponents.map((item, idx) => (
-                      <li key={idx} className="flex items-start gap-2 text-xs text-emerald-950 bg-white/90 p-2 rounded-lg border border-emerald-100">
-                        <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                        <span>{item}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                {/* 6. Print Margin Safety */}
-                <div className="border border-sky-200 rounded-xl p-3 bg-sky-50/60 flex items-center justify-between text-xs text-sky-950">
-                  <div className="flex items-center gap-2">
-                    <ShieldCheck className="w-4 h-4 text-sky-600" />
-                    <span className="font-semibold">{designReasoning.printSafety}</span>
-                  </div>
-                  <span className="text-[10px] font-bold text-sky-700 bg-sky-100 px-2 py-0.5 rounded-full">
-                    VERIFIED
-                  </span>
-                </div>
+                )}
               </div>
             ) : (
-              <div className="p-6 text-center border border-dashed border-slate-200 rounded-xl bg-slate-50">
-                <Sparkles className="w-8 h-8 text-indigo-400 mx-auto mb-2" />
-                <h5 className="text-xs font-bold text-slate-800">No Design Reasoning Generated Yet</h5>
-                <p className="text-[11px] text-slate-500 mt-1 max-w-sm mx-auto">
-                  Click below to let PagePilot's AI Layout Architect analyze this document's text and math, balance the grid, and provide complete design reasoning.
+              <div className="p-6 text-center border border-dashed border-zinc-800 rounded-xl bg-zinc-900/50">
+                <Wand2 className="w-6 h-6 text-zinc-400 mx-auto mb-2" />
+                <h5 className="text-xs font-medium text-zinc-200">No Design Audit Recorded Yet</h5>
+                <p className="text-[11px] text-zinc-400 mt-1 max-w-sm mx-auto">
+                  Run auto-layout optimization to analyze content flow, KaTeX equations, and print margins.
                 </p>
                 <button
                   onClick={() => onTransformDocument?.("auto")}
-                  className="mt-3.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all"
+                  className="mt-3.5 px-3.5 py-1.5 bg-zinc-100 hover:bg-white text-zinc-900 text-xs font-medium rounded-lg transition-colors"
                 >
-                  Auto-Design Layout Now
+                  Optimize Layout
                 </button>
               </div>
             )}
           </div>
         ) : (
-          /* Page Check Tab */
+          /* Print Audit Tab */
           <div className="p-4 space-y-3">
-            {/* Quick Auto-Repair Actions */}
             {qualityIssues.length > 0 && (
-              <div className="flex flex-wrap gap-2 p-3 bg-indigo-50/70 border border-indigo-100 rounded-xl">
-                <span className="text-[11px] font-semibold text-indigo-900 flex items-center gap-1 w-full mb-1">
-                  <Wand2 className="w-3 h-3 text-indigo-600" />
-                  Instant Layout Fix Actions:
+              <div className="flex flex-wrap gap-2 p-3 bg-zinc-900 border border-zinc-800 rounded-xl">
+                <span className="text-[11px] font-medium text-zinc-200 flex items-center gap-1.5 w-full mb-1">
+                  <Wand2 className="w-3 h-3 text-zinc-400" />
+                  Remediation Actions:
                 </span>
                 {onAutoFixMargins && (
                   <button
                     onClick={onAutoFixMargins}
-                    className="text-xs px-2.5 py-1 bg-white hover:bg-indigo-600 hover:text-white text-indigo-700 font-medium rounded-lg border border-indigo-200 transition-all shadow-sm"
+                    className="text-xs px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-medium rounded-lg border border-zinc-700 transition-colors"
                   >
-                    Snap to Safe Margins
+                    Snap to 0.45" Margins
                   </button>
                 )}
                 {onAutoFixOverlaps && (
                   <button
                     onClick={onAutoFixOverlaps}
-                    className="text-xs px-2.5 py-1 bg-white hover:bg-indigo-600 hover:text-white text-indigo-700 font-medium rounded-lg border border-indigo-200 transition-all shadow-sm"
+                    className="text-xs px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-medium rounded-lg border border-zinc-700 transition-colors"
                   >
-                    Resolve Collisions
+                    Resolve Overlaps
                   </button>
                 )}
                 {onSendMessage && (
                   <button
                     onClick={() => { onSendMessage("Fix all layout overflows, collisions, and margins."); setActiveTab("chat"); }}
-                    className="text-xs px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-all shadow-sm"
+                    className="text-xs px-2.5 py-1 bg-zinc-100 hover:bg-white text-zinc-900 font-medium rounded-lg transition-colors"
                   >
-                    AI Full Page Rebalance
+                    Full Balance
                   </button>
                 )}
               </div>
             )}
 
-            {/* Zero Issues State */}
             {qualityIssues.length === 0 && (
               <div className="p-8 text-center flex flex-col items-center justify-center">
-                <div className="w-14 h-14 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mb-3 shadow-sm">
-                  <CheckCircle2 className="w-7 h-7" />
+                <div className="w-12 h-12 rounded-full bg-emerald-950/60 border border-emerald-800/80 text-emerald-400 flex items-center justify-center mb-3">
+                  <CheckCircle2 className="w-6 h-6" />
                 </div>
-                <h4 className="text-sm font-bold text-slate-800">Page Audit Passed ✓</h4>
-                <p className="text-xs text-slate-500 mt-1.5 max-w-xs leading-relaxed">
-                  All elements conform to the 0.45" print safe margins with no overlapping containers or clipping.
+                <h4 className="text-xs font-semibold text-zinc-100">Print Audit Passed</h4>
+                <p className="text-xs text-zinc-400 mt-1.5 max-w-xs leading-relaxed">
+                  All containers respect the 0.45" print boundary with no overlapping boxes or clipped text.
                 </p>
               </div>
             )}
 
             {errors.length > 0 && (
-              <div className="border border-rose-200 bg-rose-50/80 rounded-xl p-3">
-                <div className="flex items-center gap-1.5 text-xs font-bold text-rose-800 mb-2">
-                  <ShieldAlert className="w-4 h-4 text-rose-600" />
+              <div className="border border-rose-900/60 bg-rose-950/30 rounded-xl p-3">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-rose-300 mb-2">
+                  <ShieldAlert className="w-4 h-4 text-rose-400" />
                   <span>Errors ({errors.length})</span>
                 </div>
-                <ul className="space-y-2 text-xs text-rose-950">
+                <ul className="space-y-2 text-xs text-rose-200">
                   {errors.map((err, idx) => (
-                    <li key={idx} className="bg-white/80 p-2 rounded-lg border border-rose-200">
-                      <div className="font-semibold">{err.message}</div>
-                      {err.suggestion && <div className="text-[11px] text-rose-700 mt-0.5">💡 {err.suggestion}</div>}
+                    <li key={idx} className="bg-zinc-950 p-2 rounded-lg border border-rose-900/50">
+                      <div className="font-medium">{err.message}</div>
+                      {err.suggestion && <div className="text-[11px] text-zinc-400 mt-0.5">{err.suggestion}</div>}
                     </li>
                   ))}
                 </ul>
@@ -452,16 +432,16 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             )}
 
             {warnings.length > 0 && (
-              <div className="border border-amber-200 bg-amber-50/80 rounded-xl p-3">
-                <div className="flex items-center gap-1.5 text-xs font-bold text-amber-800 mb-2">
-                  <AlertTriangle className="w-4 h-4 text-amber-600" />
+              <div className="border border-amber-900/60 bg-amber-950/30 rounded-xl p-3">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-300 mb-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-400" />
                   <span>Warnings ({warnings.length})</span>
                 </div>
-                <ul className="space-y-2 text-xs text-amber-950">
+                <ul className="space-y-2 text-xs text-amber-200">
                   {warnings.map((w, idx) => (
-                    <li key={idx} className="bg-white/80 p-2 rounded-lg border border-amber-200">
-                      <div className="font-semibold">{w.message}</div>
-                      {w.suggestion && <div className="text-[11px] text-amber-700 mt-0.5">💡 {w.suggestion}</div>}
+                    <li key={idx} className="bg-zinc-950 p-2 rounded-lg border border-amber-900/50">
+                      <div className="font-medium">{w.message}</div>
+                      {w.suggestion && <div className="text-[11px] text-zinc-400 mt-0.5">{w.suggestion}</div>}
                     </li>
                   ))}
                 </ul>
@@ -469,16 +449,16 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             )}
 
             {infos.length > 0 && (
-              <div className="border border-sky-200 bg-sky-50/80 rounded-xl p-3">
-                <div className="flex items-center gap-1.5 text-xs font-bold text-sky-800 mb-2">
-                  <Info className="w-4 h-4 text-sky-600" />
+              <div className="border border-zinc-800 bg-zinc-900 rounded-xl p-3">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-zinc-300 mb-2">
+                  <Info className="w-4 h-4 text-zinc-400" />
                   <span>Suggestions ({infos.length})</span>
                 </div>
-                <ul className="space-y-2 text-xs text-sky-950">
+                <ul className="space-y-2 text-xs text-zinc-300">
                   {infos.map((info, idx) => (
-                    <li key={idx} className="bg-white/80 p-2 rounded-lg border border-sky-200">
-                      <div className="font-semibold">{info.message}</div>
-                      {info.suggestion && <div className="text-[11px] text-sky-700 mt-0.5">💡 {info.suggestion}</div>}
+                    <li key={idx} className="bg-zinc-950 p-2 rounded-lg border border-zinc-800">
+                      <div className="font-medium">{info.message}</div>
+                      {info.suggestion && <div className="text-[11px] text-zinc-400 mt-0.5">{info.suggestion}</div>}
                     </li>
                   ))}
                 </ul>

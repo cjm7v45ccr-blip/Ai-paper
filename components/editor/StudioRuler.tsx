@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { inchesToPx } from "@/lib/coordinates";
-import { Shield, Sparkles } from "lucide-react";
+import { Shield } from "lucide-react";
 
 interface StudioRulerProps {
   pageWidthInches: number; // 8.5
@@ -23,13 +23,12 @@ export const StudioRuler: React.FC<StudioRulerProps> = ({
   const leftMarginPx = inchesToPx(safeMarginInches); // 43.2px
   const rightMarginPx = inchesToPx(pageWidthInches - safeMarginInches); // 772.8px
   const centerPx = inchesToPx(pageWidthInches / 2); // 408px
-  const rulerHeight = 24;
+  const rulerHeight = 22;
 
   const [mousePosPx, setMousePosPx] = useState<number | null>(null);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      // Find canvas container
       const canvasEl = document.getElementById("studio-document-canvas");
       if (canvasEl) {
         const rect = canvasEl.getBoundingClientRect();
@@ -60,7 +59,7 @@ export const StudioRuler: React.FC<StudioRulerProps> = ({
     const posPx = inchesToPx(i / 8);
     const isHalf = i % 4 === 0;
     const isQuarter = i % 2 === 0;
-    const height = isHalf ? 8 : isQuarter ? 5 : 3;
+    const height = isHalf ? 7 : isQuarter ? 5 : 3;
     subTicks.push({ posPx, height, isHalf });
   }
 
@@ -71,11 +70,11 @@ export const StudioRuler: React.FC<StudioRulerProps> = ({
         width: `${canvasWidthPx * zoom}px`,
         height: `${rulerHeight}px`,
       }}
-      title="Dia Spatial Guide — 8.5 x 11 inch with 0.45 in print safe boundaries"
+      title="Precision Spatial Guide — 8.5 × 11 inch (0.45 in print safe margins)"
     >
       {/* Precision Scale Bar */}
       <div
-        className="relative w-full h-full bg-slate-900/95 backdrop-blur-md rounded-md border border-slate-800 shadow-sm flex items-center overflow-hidden"
+        className="relative w-full h-full bg-zinc-950 rounded border border-zinc-800 flex items-center overflow-hidden"
         style={{
           width: `${canvasWidthPx}px`,
           height: `${rulerHeight}px`,
@@ -85,18 +84,16 @@ export const StudioRuler: React.FC<StudioRulerProps> = ({
       >
         {/* Left 0.45" Safe Bleed Indicator */}
         <div
-          className="absolute left-0 top-0 bottom-0 bg-rose-950/40 border-r border-rose-500/50 flex items-center justify-center z-10"
+          className="absolute left-0 top-0 bottom-0 bg-zinc-900/80 border-r border-zinc-700/60 flex items-center justify-center z-10"
           style={{ width: `${leftMarginPx}px` }}
-          title={`Bleed Zone (0 to ${safeMarginInches}")`}
+          title={`Print Bleed Margin (0 to ${safeMarginInches}")`}
         >
-          <span className="text-[8px] font-mono font-bold text-rose-400 opacity-80 scale-75">
-            0.45"
-          </span>
+          <span className="text-[8px] font-mono text-zinc-400">0.45"</span>
         </div>
 
         {/* Safe Printable Zone Track */}
         <div
-          className="absolute top-0 bottom-0 bg-slate-950/60 z-0"
+          className="absolute top-0 bottom-0 bg-zinc-950 z-0"
           style={{
             left: `${leftMarginPx}px`,
             width: `${rightMarginPx - leftMarginPx}px`,
@@ -105,20 +102,18 @@ export const StudioRuler: React.FC<StudioRulerProps> = ({
 
         {/* Center Optical Axis Marker (4.25") */}
         <div
-          className="absolute top-0 bottom-0 w-px bg-cyan-400/40 z-10 pointer-events-none"
+          className="absolute top-0 bottom-0 w-px bg-zinc-700 z-10 pointer-events-none"
           style={{ left: `${centerPx}px` }}
-          title="Optical Center Axis (4.25 in)"
+          title="Center Axis (4.25 in)"
         />
 
         {/* Right 0.45" Safe Bleed Indicator */}
         <div
-          className="absolute right-0 top-0 bottom-0 bg-rose-950/40 border-l border-rose-500/50 flex items-center justify-center z-10"
+          className="absolute right-0 top-0 bottom-0 bg-zinc-900/80 border-l border-zinc-700/60 flex items-center justify-center z-10"
           style={{ width: `${canvasWidthPx - rightMarginPx}px` }}
-          title={`Bleed Zone (8.05" to 8.5")`}
+          title={`Print Bleed Margin (8.05" to 8.5")`}
         >
-          <span className="text-[8px] font-mono font-bold text-rose-400 opacity-80 scale-75">
-            0.45"
-          </span>
+          <span className="text-[8px] font-mono text-zinc-400">0.45"</span>
         </div>
 
         {/* Sub-inch Tick Marks */}
@@ -126,7 +121,7 @@ export const StudioRuler: React.FC<StudioRulerProps> = ({
           <div
             key={idx}
             className={`absolute top-0 w-px pointer-events-none z-10 ${
-              tick.isHalf ? "bg-slate-500" : "bg-slate-700"
+              tick.isHalf ? "bg-zinc-600" : "bg-zinc-800"
             }`}
             style={{
               left: `${tick.posPx}px`,
@@ -139,12 +134,12 @@ export const StudioRuler: React.FC<StudioRulerProps> = ({
         {inchTicks.map((t) => (
           <React.Fragment key={t.inch}>
             <div
-              className="absolute top-0 w-px bg-slate-400 z-10 pointer-events-none"
-              style={{ left: `${t.posPx}px`, height: "11px" }}
+              className="absolute top-0 w-px bg-zinc-500 z-10 pointer-events-none"
+              style={{ left: `${t.posPx}px`, height: "10px" }}
             />
             {t.inch > 0 && t.inch < pageWidthInches && (
               <span
-                className="absolute text-[9px] font-mono font-semibold text-slate-300 z-10 pointer-events-none"
+                className="absolute text-[9px] font-mono text-zinc-400 z-10 pointer-events-none"
                 style={{
                   left: `${t.posPx + 3}px`,
                   top: "2px",
@@ -157,13 +152,13 @@ export const StudioRuler: React.FC<StudioRulerProps> = ({
           </React.Fragment>
         ))}
 
-        {/* Real-time Cursor Optical Hairline Tracking */}
+        {/* Real-time Cursor Hairline Tracking */}
         {mousePosPx !== null && (
           <div
-            className="absolute top-0 bottom-0 w-px bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)] z-30 pointer-events-none transition-all duration-75"
+            className="absolute top-0 bottom-0 w-px bg-zinc-300 z-30 pointer-events-none"
             style={{ left: `${mousePosPx}px` }}
           >
-            <div className="absolute top-0 -translate-x-1/2 -translate-y-full bg-cyan-500 text-slate-950 px-1 py-0.5 rounded text-[8px] font-mono font-bold tracking-tight shadow">
+            <div className="absolute top-0 -translate-x-1/2 -translate-y-full bg-zinc-800 text-zinc-200 px-1 py-0.5 rounded text-[8px] font-mono shadow">
               {(mousePosPx / 96).toFixed(2)}"
             </div>
           </div>
@@ -172,10 +167,10 @@ export const StudioRuler: React.FC<StudioRulerProps> = ({
         {/* Quick Margin Guide Toggle Pill */}
         <button
           onClick={onToggleMargins}
-          className="absolute right-1.5 top-1/2 -translate-y-1/2 z-20 text-[9px] font-mono font-semibold flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition-all border border-slate-700"
+          className="absolute right-1.5 top-1/2 -translate-y-1/2 z-20 text-[9px] font-mono flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 hover:text-white transition-colors border border-zinc-700"
           title="Toggle 0.45 in Print Bleed Guidelines"
         >
-          <Shield className="w-2.5 h-2.5 text-emerald-400" />
+          <Shield className="w-2.5 h-2.5 text-zinc-400" />
           <span>{showMargins ? "Bleed: ON" : "Bleed: OFF"}</span>
         </button>
       </div>

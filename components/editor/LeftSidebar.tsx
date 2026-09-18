@@ -2,534 +2,816 @@
 
 import React, { useState } from "react";
 import {
-  Type,
-  Heading,
-  TrendingUp,
-  Workflow,
-  PenTool,
-  Sparkles,
+  FileText,
+  Presentation,
+  ListOrdered,
+  Plus,
+  Copy,
+  Trash2,
+  ChevronUp,
+  ChevronDown,
   Layers,
-  Square,
-  Minus,
-  ArrowRight,
-  Quote as QuoteIcon,
-  Image as ImageIcon,
+  Sparkles,
   Sigma,
   Table as TableIcon,
   CheckSquare,
-  ListOrdered,
-  ShieldCheck,
-  Wand2,
-  Scale,
-  BrainCircuit,
-  Sliders,
-  Compass,
+  PenTool,
+  BarChart3,
+  Lightbulb,
+  Workflow,
+  FolderPlus,
+  PanelLeftClose,
+  PanelLeftOpen,
+  ChevronRight,
+  Hash,
+  LayoutTemplate,
+  FileSpreadsheet,
+  MoveUp,
+  MoveDown,
 } from "lucide-react";
-import { DocumentElement, DocumentModel, DesignReasoning } from "@/types/document";
-import { SAFE_MARGIN_INCHES, PAGE_WIDTH_INCHES, PAGE_HEIGHT_INCHES } from "@/lib/coordinates";
+import { DocumentModel, DocumentElement, DocumentMode, PageData } from "@/types/document";
 
 interface LeftSidebarProps {
-  document?: DocumentModel;
+  document: DocumentModel;
+  documentMode: DocumentMode;
+  activePageIndex: number;
+  onSelectPageIndex: (index: number) => void;
+  onAddPage: () => void;
+  onDuplicatePage: (index: number) => void;
+  onDeletePage: (index: number) => void;
+  onMovePage: (fromIndex: number, toIndex: number) => void;
   selectedElementId?: string | null;
-  onSelectElement?: (id: string | null) => void;
+  onSelectElement: (id: string | null) => void;
   onAddElement: (element: DocumentElement) => void;
-  onApplyTemplate: (preset: "compound-interest" | "photosynthesis" | "quiz" | "physics" | "executive" | "chemistry") => void;
-  onAutoDesign?: (mode: string) => void;
-  designReasoning?: DesignReasoning;
+  onApplyPreset: (presetKey: string) => void;
 }
 
 export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   document: doc,
+  documentMode,
+  activePageIndex,
+  onSelectPageIndex,
+  onAddPage,
+  onDuplicatePage,
+  onDeletePage,
+  onMovePage,
   selectedElementId,
   onSelectElement,
   onAddElement,
-  onApplyTemplate,
-  onAutoDesign,
-  designReasoning,
+  onApplyPreset,
 }) => {
-  const [activeTab, setActiveTab] = useState<"dia" | "components" | "outline">("dia");
+  const [activeTab, setActiveTab] = useState<"pages" | "outline" | "insert" | "templates">("pages");
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
-  const createSmartElement = (type: DocumentElement["type"]) => {
-    let width = 4.0;
-    let height = 1.6;
-    let content: any = "Sample text";
-    let metadata: any = { label: type };
+  const pages: PageData[] = doc.pages && doc.pages.length > 0
+    ? doc.pages
+    : [
+        {
+          id: "page-1",
+          title: "Page 1",
+          elements: doc.elements || [],
+        },
+      ];
+
+  const currentElements = pages[activePageIndex]?.elements || doc.elements || [];
+
+  // Create Element Generator Helper
+  const handleInsert = (type: DocumentElement["type"]) => {
+    const newId = `el-${type}-${Date.now()}`;
+    const isPresentation = documentMode === "presentation";
+    const defaultW = isPresentation ? 5.5 : 7.4;
+    const defaultH = isPresentation ? 1.8 : 1.4;
+
+    let newElement: DocumentElement;
 
     switch (type) {
       case "heading":
-        width = 7.4;
-        height = 0.85;
-        content = {
-          title: "New Section Title",
-          subtitle: "Clear explanatory subtitle describing core concept",
+        newElement = {
+          id: newId,
+          type: "heading",
+          x: isPresentation ? 0.8 : 0.55,
+          y: isPresentation ? 1.0 : 0.55,
+          width: isPresentation ? 11.7 : 7.4,
+          height: 0.85,
+          zIndex: currentElements.length + 1,
+          content: {
+            title: isPresentation ? "Slide Title & Key Focus" : "Section Title",
+            subtitle: "Concise explanatory subtitle summarizing key insight",
+          },
+          style: {
+            fontSize: isPresentation ? 28 : 22,
+            fontWeight: 700,
+            color: "#09090b",
+          },
+          metadata: { label: "Heading Block", badge: isPresentation ? "KEY POINT" : "SECTION" },
         };
-        metadata = { label: "Heading Block", badge: "SECTION" };
         break;
-      case "text":
-        width = 3.58;
-        height = 1.4;
-        content =
-          "Detailed explanation or study notes. Content automatically wraps cleanly and respects document boundaries.";
-        metadata = { label: "Text Block" };
-        break;
+
       case "formula":
-        width = 3.58;
-        height = 1.9;
-        content = {
-          title: "Governing Law / Equation",
-          equation: "E = mc^2",
-          breakdown: [
-            { symbol: "E", label: "Energy (Joules)" },
-            { symbol: "m", label: "Relativistic Mass (kg)" },
-            { symbol: "c", label: "Speed of Light in Vacuum (m/s)" },
-          ],
+        newElement = {
+          id: newId,
+          type: "formula",
+          x: isPresentation ? 0.8 : 0.55,
+          y: isPresentation ? 2.2 : 1.5,
+          width: isPresentation ? 5.6 : 7.4,
+          height: 1.6,
+          zIndex: currentElements.length + 1,
+          content: {
+            title: "Mathematical Law / Formula",
+            equation: "f(x) = \\int_{-\\infty}^{\\infty} \\hat{f}(\\xi)\\,e^{2\\pi i \\xi x}\\,d\\xi",
+            breakdown: [
+              { symbol: "f(x)", label: "Spatial function" },
+              { symbol: "\\hat{f}", label: "Fourier transform" },
+              { symbol: "\\xi", label: "Frequency component" },
+            ],
+          },
+          style: {
+            backgroundColor: "#fafafa",
+            borderColor: "#e4e4e7",
+            borderWidth: 1,
+            borderRadius: 8,
+            padding: 12,
+          },
+          metadata: { label: "Formula Card" },
         };
-        metadata = { label: "Formula Card", categoryBadge: "FORMULA" };
         break;
+
       case "callout":
-        width = 3.58;
-        height = 1.4;
-        content = {
-          title: "Critical Principle",
-          body: "Always verify units before completing calculations.",
+        newElement = {
+          id: newId,
+          type: "callout",
+          x: isPresentation ? 6.8 : 0.55,
+          y: isPresentation ? 2.2 : 1.5,
+          width: isPresentation ? 5.7 : 7.4,
+          height: 1.6,
+          zIndex: currentElements.length + 1,
+          content: {
+            title: "Core Concept & Takeaway",
+            body: "Strategic takeaway emphasizing verified analytical results and architectural principles.",
+          },
+          style: {
+            backgroundColor: "#f4f4f5",
+            borderColor: "#d4d4d8",
+            borderWidth: 1,
+            borderRadius: 8,
+            padding: 12,
+          },
+          metadata: { label: "Callout Box", accentColor: "#4f46e5", categoryBadge: "INSIGHT" },
         };
-        metadata = { label: "Callout", categoryBadge: "INSIGHT", accentColor: "#6366f1" };
         break;
+
       case "chart":
-        width = 7.4;
-        height = 2.2;
-        content = {
-          title: "Experimental Observations & Rate Progression",
-          labels: ["t0", "t1", "t2", "t3", "t4", "t5"],
-          series: [
-            { name: "Observed", color: "#6366f1", values: [10, 25, 45, 70, 95, 120] },
-            { name: "Baseline", color: "#94a3b8", values: [10, 20, 30, 40, 50, 60] },
-          ],
+        newElement = {
+          id: newId,
+          type: "chart",
+          x: isPresentation ? 0.8 : 0.55,
+          y: isPresentation ? 2.2 : 3.2,
+          width: isPresentation ? 11.7 : 7.4,
+          height: isPresentation ? 4.2 : 2.2,
+          zIndex: currentElements.length + 1,
+          content: {
+            title: "Comparative Performance Trajectory",
+            labels: ["M1", "M2", "M3", "M4", "M5", "M6"],
+            series: [
+              { name: "Optimal Target", color: "#4f46e5", values: [100, 240, 480, 850, 1400, 2200] },
+              { name: "Baseline", color: "#71717a", values: [100, 180, 290, 410, 560, 750] },
+            ],
+          },
+          style: {
+            backgroundColor: "#ffffff",
+            borderColor: "#e4e4e7",
+            borderWidth: 1,
+            borderRadius: 8,
+            padding: 12,
+          },
         };
-        metadata = { label: "Data Chart", categoryBadge: "EMPIRICAL" };
         break;
+
       case "diagram":
-        width = 7.4;
-        height = 1.6;
-        content = {
-          title: "3-Stage Reaction Protocol",
-          steps: [
-            { number: 1, title: "Tare Balance", subtitle: "Zero out boat", color: "#6366f1" },
-            { number: 2, title: "Measure Reagents", subtitle: "Record to 0.01g", color: "#06b6d4" },
-            { number: 3, title: "Initiate Stir", subtitle: "Maintain 25°C", color: "#10b981" },
-          ],
+        newElement = {
+          id: newId,
+          type: "diagram",
+          x: isPresentation ? 0.8 : 0.55,
+          y: isPresentation ? 2.2 : 5.5,
+          width: isPresentation ? 11.7 : 7.4,
+          height: 1.6,
+          zIndex: currentElements.length + 1,
+          content: {
+            title: "Three-Stage Workflow Pipeline",
+            nodes: [
+              { step: "01", title: "Intake & Parsing", desc: "Structured data ingestion" },
+              { step: "02", title: "Synthesis & KaTeX", desc: "Deterministic layout engine" },
+              { step: "03", title: "Export & Delivery", desc: "Vector PDF & slides" },
+            ],
+          },
+          style: {
+            backgroundColor: "#fafafa",
+            borderColor: "#e4e4e7",
+            borderWidth: 1,
+            borderRadius: 8,
+            padding: 10,
+          },
         };
-        metadata = { label: "Process Diagram", categoryBadge: "PROTOCOL" };
         break;
-      case "writingLines":
-        width = 7.4;
-        height = 1.6;
-        content = {
-          prompt: "Synthesize Findings & Experimental Margin of Error:",
-          lineCount: 4,
-          spacing: 28,
-        };
-        metadata = { label: "Synthesis Workspace", categoryBadge: "STUDENT WORKSPACE" };
-        break;
+
       case "table":
-        width = 7.4;
-        height = 1.8;
-        content = {
-          title: "Comparative Parameters Matrix",
-          headers: ["Parameter", "SI Base Unit", "Typical Magnitude", "Dimensional Form"],
-          rows: [
-            ["Mass", "kg", "10^-3 to 10^3", "[M]"],
-            ["Length", "m", "10^-9 to 10^3", "[L]"],
-            ["Time", "s", "10^-6 to 10^4", "[T]"],
-          ],
+        newElement = {
+          id: newId,
+          type: "table",
+          x: 0.55,
+          y: 2.0,
+          width: isPresentation ? 11.7 : 7.4,
+          height: 1.8,
+          zIndex: currentElements.length + 1,
+          content: {
+            title: "Key Metrics Matrix",
+            headers: ["Category", "Metric", "Target", "Status"],
+            rows: [
+              ["Latency", "Render Cycle", "< 16ms", "Passed"],
+              ["Precision", "Print Bleed", "0.45''", "Verified"],
+              ["Throughput", "Document Gen", "10x", "Active"],
+            ],
+          },
+          style: {
+            backgroundColor: "#ffffff",
+            borderColor: "#e4e4e7",
+            borderWidth: 1,
+            borderRadius: 8,
+            padding: 10,
+          },
         };
-        metadata = { label: "Data Matrix", categoryBadge: "REFERENCE" };
         break;
-      case "quote":
-        width = 7.4;
-        height = 1.1;
-        content = {
-          quote: "Architecture is the learned game, correct and magnificent, of forms assembled in the light.",
-          author: "Le Corbusier",
-        };
-        metadata = { label: "Featured Quote" };
-        break;
+
       case "checkboxGroup":
-        width = 3.58;
-        height = 1.5;
-        content = {
-          title: "Verification Checklist",
-          items: [
-            { text: "Identified all initial given parameters", checked: true },
-            { text: "Derived dimensionally consistent equation", checked: false },
-            { text: "Checked answer with correct significant figures", checked: false },
-          ],
+        newElement = {
+          id: newId,
+          type: "checkboxGroup",
+          x: 0.55,
+          y: 2.0,
+          width: isPresentation ? 11.7 : 7.4,
+          height: 1.6,
+          zIndex: currentElements.length + 1,
+          content: {
+            title: "Verification Action Items",
+            items: [
+              { text: "Confirm document structural hierarchy.", checked: true },
+              { text: "Validate formula breakdown symbols.", checked: true },
+              { text: "Inspect responsive 16:9 layout boundaries.", checked: false },
+            ],
+          },
+          style: {
+            backgroundColor: "#ffffff",
+            borderColor: "#e4e4e7",
+            borderWidth: 1,
+            borderRadius: 8,
+            padding: 12,
+          },
         };
-        metadata = { label: "Checklist" };
         break;
-      case "divider":
-        width = 7.4;
-        height = 0.2;
-        content = {};
-        metadata = { label: "Section Divider" };
+
+      case "writingLines":
+        newElement = {
+          id: newId,
+          type: "writingLines",
+          x: 0.55,
+          y: 2.0,
+          width: 7.4,
+          height: 2.5,
+          zIndex: currentElements.length + 1,
+          content: {
+            title: "Student Notes & Problem Solutions",
+            promptText: "Step 1: Write down given parameters\nStep 2: Show intermediate calculation steps:",
+            lineCount: 6,
+          },
+          style: {
+            backgroundColor: "#ffffff",
+            borderColor: "#e4e4e7",
+            borderWidth: 1,
+            borderRadius: 8,
+            padding: 12,
+          },
+        };
         break;
+
+      case "drawingArea":
+        newElement = {
+          id: newId,
+          type: "drawingArea",
+          x: 0.55,
+          y: 2.0,
+          width: 7.4,
+          height: 2.5,
+          zIndex: currentElements.length + 1,
+          content: {
+            title: "Workspace Sketchpad Canvas",
+            promptWatermark: "Draft calculations or sketch curves here...",
+          },
+          style: {
+            backgroundColor: "#fafafa",
+            borderColor: "#e4e4e7",
+            borderStyle: "dashed",
+            borderWidth: 1,
+            borderRadius: 8,
+            padding: 12,
+          },
+        };
+        break;
+
+      default:
+        newElement = {
+          id: newId,
+          type: "text",
+          x: 0.55,
+          y: 2.0,
+          width: defaultW,
+          height: defaultH,
+          zIndex: currentElements.length + 1,
+          content: "Rich text paragraph block. Supports **bold typography**, *italics*, and KaTeX equations like $E=mc^2$.",
+          style: { fontSize: 13, color: "#27272a", lineHeight: 1.5 },
+        };
     }
 
-    const newEl: DocumentElement = {
-      id: `el-${Date.now()}`,
-      type,
-      x: SAFE_MARGIN_INCHES + 0.1,
-      y: 2.2,
-      width,
-      height,
-      zIndex: 10,
-      content,
-      metadata,
-      style: {
-        backgroundColor: type === "callout" ? "#f8fafc" : "#ffffff",
-        borderColor: type === "callout" ? "#818cf8" : "#cbd5e1",
-        borderWidth: 1,
-        borderRadius: 10,
-        padding: 12,
-      },
-    };
-
-    onAddElement(newEl);
+    onAddElement(newElement);
+    onSelectElement(newId);
   };
 
+  // Find all headings and sections for Outline tab
+  const outlineItems = currentElements.filter(
+    (el) => el.type === "heading" || el.type === "callout" || el.type === "formula" || el.type === "chart"
+  );
+
+  if (isCollapsed) {
+    return (
+      <div className="no-print w-11 bg-[#111215] border-r border-white/[0.07] flex flex-col items-center py-3 select-none shrink-0 z-20 transition-all">
+        <button
+          onClick={() => setIsCollapsed(false)}
+          className="p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-white/[0.07] transition-colors"
+          title="Expand Navigation Panel"
+        >
+          <PanelLeftOpen className="w-4 h-4" />
+        </button>
+
+        <div className="h-px w-6 bg-white/[0.07] my-3" />
+
+        <div className="flex flex-col gap-2">
+          <button
+            onClick={() => {
+              setIsCollapsed(false);
+              setActiveTab("pages");
+            }}
+            className={`p-2 rounded-lg transition-colors ${
+              activeTab === "pages" ? "bg-white/[0.1] text-white" : "text-zinc-400 hover:text-zinc-200"
+            }`}
+            title="Pages / Slides"
+          >
+            {documentMode === "presentation" ? <Presentation className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
+          </button>
+          <button
+            onClick={() => {
+              setIsCollapsed(false);
+              setActiveTab("insert");
+            }}
+            className={`p-2 rounded-lg transition-colors ${
+              activeTab === "insert" ? "bg-white/[0.1] text-white" : "text-zinc-400 hover:text-zinc-200"
+            }`}
+            title="Insert Components"
+          >
+            <Plus className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => {
+              setIsCollapsed(false);
+              setActiveTab("outline");
+            }}
+            className={`p-2 rounded-lg transition-colors ${
+              activeTab === "outline" ? "bg-white/[0.1] text-white" : "text-zinc-400 hover:text-zinc-200"
+            }`}
+            title="Document Outline"
+          >
+            <ListOrdered className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <aside className="no-print w-72 bg-slate-900 text-slate-200 border-r border-slate-800 flex flex-col h-[calc(100vh-3.5rem)] z-20 shrink-0 select-none shadow-xl">
-      {/* Studio Tab Switcher */}
-      <div className="flex border-b border-slate-800 p-1.5 gap-1 bg-slate-950/60">
+    <aside className="no-print w-64 bg-[#111215] text-zinc-300 border-r border-white/[0.07] flex flex-col h-[calc(100vh-3.25rem)] select-none shrink-0 z-20 transition-all">
+      {/* Tab Navigation Header */}
+      <div className="p-2 border-b border-white/[0.07] flex items-center justify-between">
+        <div className="flex items-center gap-1 bg-[#18191e] p-0.5 rounded-lg text-xs w-full mr-1">
+          <button
+            onClick={() => setActiveTab("pages")}
+            className={`flex-1 py-1 px-1.5 rounded-md font-medium text-[11px] text-center transition-all ${
+              activeTab === "pages" ? "bg-zinc-800 text-white shadow-2xs" : "text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            {documentMode === "presentation" ? "Slides" : "Pages"}
+          </button>
+          <button
+            onClick={() => setActiveTab("outline")}
+            className={`flex-1 py-1 px-1.5 rounded-md font-medium text-[11px] text-center transition-all ${
+              activeTab === "outline" ? "bg-zinc-800 text-white shadow-2xs" : "text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            Outline
+          </button>
+          <button
+            onClick={() => setActiveTab("insert")}
+            className={`flex-1 py-1 px-1.5 rounded-md font-medium text-[11px] text-center transition-all ${
+              activeTab === "insert" ? "bg-zinc-800 text-white shadow-2xs" : "text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            Insert
+          </button>
+          <button
+            onClick={() => setActiveTab("templates")}
+            className={`flex-1 py-1 px-1.5 rounded-md font-medium text-[11px] text-center transition-all ${
+              activeTab === "templates" ? "bg-zinc-800 text-white shadow-2xs" : "text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            Themes
+          </button>
+        </div>
+
+        {/* Collapse Sidebar Button */}
         <button
-          onClick={() => setActiveTab("dia")}
-          className={`flex-1 text-xs py-1.5 font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
-            activeTab === "dia"
-              ? "bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-sm border border-indigo-400/40"
-              : "text-slate-400 hover:text-white hover:bg-slate-800/60"
-          }`}
-          title="Dia Autonomous Designist & Creative Brain"
+          onClick={() => setIsCollapsed(true)}
+          className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/[0.07] transition-colors"
+          title="Collapse Sidebar"
         >
-          <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-          <span>Dia Brain</span>
-        </button>
-        <button
-          onClick={() => setActiveTab("components")}
-          className={`flex-1 text-xs py-1.5 font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
-            activeTab === "components"
-              ? "bg-slate-800 text-white shadow-sm border border-slate-700"
-              : "text-slate-400 hover:text-white hover:bg-slate-800/60"
-          }`}
-          title="Architectural Blocks & Elements"
-        >
-          <Layers className="w-3.5 h-3.5 text-indigo-400" />
-          <span>Blocks</span>
-        </button>
-        <button
-          onClick={() => setActiveTab("outline")}
-          className={`flex-1 text-xs py-1.5 font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
-            activeTab === "outline"
-              ? "bg-slate-800 text-white shadow-sm border border-slate-700"
-              : "text-slate-400 hover:text-white hover:bg-slate-800/60"
-          }`}
-          title="Spatial Document Tree"
-        >
-          <Compass className="w-3.5 h-3.5 text-cyan-400" />
-          <span>Outline</span>
+          <PanelLeftClose className="w-3.5 h-3.5" />
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-3 space-y-4">
-        {/* TAB 1: DIA DESIGNIST & BRAIN */}
-        {activeTab === "dia" && (
-          <div className="space-y-4">
-            {/* Live Design Telemetry Card */}
-            <div className="bg-gradient-to-br from-slate-800/90 to-slate-900/90 border border-slate-700/80 rounded-xl p-3 shadow-sm space-y-2.5">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-indigo-400 flex items-center gap-1">
-                  <BrainCircuit className="w-3.5 h-3.5" /> Dia Telemetry
-                </span>
-                <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-700/50 font-semibold">
-                  0.45" Safe Margin Locked
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 text-[11px] pt-1 border-t border-slate-700/50">
-                <div className="bg-slate-950/60 p-2 rounded-lg border border-slate-800">
-                  <div className="text-[10px] text-slate-400 font-mono">Visual Balance</div>
-                  <div className="text-sm font-extrabold text-white mt-0.5 font-sans flex items-center gap-1">
-                    <span>98.4%</span>
-                    <span className="text-[9px] text-emerald-400 font-normal">Optimal</span>
-                  </div>
-                </div>
-                <div className="bg-slate-950/60 p-2 rounded-lg border border-slate-800">
-                  <div className="text-[10px] text-slate-400 font-mono">Math Engine</div>
-                  <div className="text-sm font-extrabold text-white mt-0.5 font-sans flex items-center gap-1">
-                    <Sigma className="w-3.5 h-3.5 text-indigo-400" />
-                    <span>KaTeX</span>
-                  </div>
-                </div>
-              </div>
+      {/* Tab Content Body */}
+      <div className="flex-1 overflow-y-auto p-2.5 space-y-3">
+        {/* TAB 1: PAGES / SLIDES */}
+        {activeTab === "pages" && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between px-1">
+              <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">
+                {documentMode === "presentation" ? `Slides (${pages.length})` : `Pages (${pages.length})`}
+              </span>
+              <button
+                onClick={onAddPage}
+                className="flex items-center gap-1 text-[11px] text-indigo-400 hover:text-indigo-300 font-medium px-1.5 py-0.5 rounded hover:bg-white/[0.05] transition-colors"
+              >
+                <Plus className="w-3 h-3" />
+                <span>Add</span>
+              </button>
             </div>
 
-            {/* Autonomous Directives (Dia does whatever looks best) */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <h4 className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
-                  <Wand2 className="w-3 h-3 text-amber-400" /> Autonomous Directives
-                </h4>
-                <span className="text-[9px] text-slate-500 font-mono">Live AI Engine</span>
-              </div>
+            {/* List of Pages / Slides */}
+            <div className="space-y-2">
+              {pages.map((page, idx) => {
+                const isSelected = idx === activePageIndex;
+                return (
+                  <div
+                    key={page.id || idx}
+                    onClick={() => onSelectPageIndex(idx)}
+                    className={`group relative rounded-xl border p-2 cursor-pointer transition-all ${
+                      isSelected
+                        ? "bg-[#1c1e24] border-indigo-500/80 shadow-md ring-1 ring-indigo-500/30"
+                        : "bg-[#14161a] border-white/[0.06] hover:border-white/[0.12] hover:bg-[#181a1f]"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-4 h-4 rounded-full bg-zinc-800 text-zinc-300 font-mono text-[10px] flex items-center justify-center">
+                          {idx + 1}
+                        </span>
+                        <span className="text-xs font-medium text-zinc-200 truncate max-w-[130px]">
+                          {page.title || (documentMode === "presentation" ? `Slide ${idx + 1}` : `Page ${idx + 1}`)}
+                        </span>
+                      </div>
 
-              <div className="space-y-1.5">
-                <button
-                  onClick={() => onAutoDesign?.("auto")}
-                  className="w-full text-left p-2.5 rounded-xl bg-gradient-to-r from-violet-950/60 to-indigo-950/60 hover:from-violet-900/60 hover:to-indigo-900/60 border border-indigo-700/50 hover:border-indigo-500 text-white transition-all shadow-sm group"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-indigo-200 group-hover:text-white flex items-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                      Dia Autonomous Redesign
-                    </span>
-                    <span className="text-[10px] font-mono text-indigo-400">Run</span>
-                  </div>
-                  <p className="text-[10.5px] text-slate-400 mt-1 leading-snug">
-                    Dia analyzes semantic roles, recalculates golden-ratio columns, elevates math & balances vertical rhythm.
-                  </p>
-                </button>
+                      {/* Action Menu for Slide/Page */}
+                      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {idx > 0 && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onMovePage(idx, idx - 1);
+                            }}
+                            className="p-1 rounded text-zinc-400 hover:text-white hover:bg-white/[0.1]"
+                            title="Move Up"
+                          >
+                            <MoveUp className="w-3 h-3" />
+                          </button>
+                        )}
+                        {idx < pages.length - 1 && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onMovePage(idx, idx + 1);
+                            }}
+                            className="p-1 rounded text-zinc-400 hover:text-white hover:bg-white/[0.1]"
+                            title="Move Down"
+                          >
+                            <MoveDown className="w-3 h-3" />
+                          </button>
+                        )}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDuplicatePage(idx);
+                          }}
+                          className="p-1 rounded text-zinc-400 hover:text-white hover:bg-white/[0.1]"
+                          title="Duplicate"
+                        >
+                          <Copy className="w-3 h-3" />
+                        </button>
+                        {pages.length > 1 && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDeletePage(idx);
+                            }}
+                            className="p-1 rounded text-zinc-400 hover:text-rose-400 hover:bg-rose-950/40"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
 
-                <button
-                  onClick={() => onAutoDesign?.("chemistry")}
-                  className="w-full text-left p-2.5 rounded-xl bg-slate-800/70 hover:bg-slate-800 border border-slate-700 hover:border-slate-600 text-white transition-all group"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-200 group-hover:text-white flex items-center gap-1.5">
-                      <span>🧪</span> STEM Measurement & KaTeX Guide
-                    </span>
-                    <span className="text-[10px] font-mono text-slate-400">Apply</span>
+                    {/* Miniature Page Thumbnail Preview */}
+                    <div
+                      className={`w-full rounded-md bg-white border border-zinc-200/20 overflow-hidden relative ${
+                        documentMode === "presentation" ? "aspect-16/9" : "aspect-[8.5/11]"
+                      }`}
+                    >
+                      <div className="w-full h-full p-1.5 flex flex-col gap-1 pointer-events-none opacity-80 scale-95 origin-top">
+                        {page.elements?.slice(0, 4).map((el, elIdx) => (
+                          <div
+                            key={elIdx}
+                            className={`rounded-xs ${
+                              el.type === "heading"
+                                ? "h-2 w-3/4 bg-zinc-800"
+                                : el.type === "formula"
+                                ? "h-3.5 w-full bg-zinc-200 border border-zinc-300"
+                                : el.type === "chart"
+                                ? "h-4 w-full bg-indigo-50 border border-indigo-200"
+                                : "h-2 w-full bg-zinc-100"
+                            }`}
+                          />
+                        ))}
+                      </div>
+                    </div>
                   </div>
-                  <p className="text-[10.5px] text-slate-400 mt-1 leading-snug">
-                    Generates elevated KaTeX density formulas, metric progression, and synthesis workspace.
-                  </p>
-                </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
-                <button
-                  onClick={() => onAutoDesign?.("balance")}
-                  className="w-full text-left p-2.5 rounded-xl bg-slate-800/70 hover:bg-slate-800 border border-slate-700 hover:border-slate-600 text-white transition-all group"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-200 group-hover:text-white flex items-center gap-1.5">
-                      <Scale className="w-3.5 h-3.5 text-cyan-400" /> Equalize Column Weights
-                    </span>
-                    <span className="text-[10px] font-mono text-slate-400">Balance</span>
-                  </div>
-                  <p className="text-[10.5px] text-slate-400 mt-1 leading-snug">
-                    Eliminates awkward blank column space by packing elements symmetrically.
-                  </p>
-                </button>
-
-                <button
-                  onClick={() => onAutoDesign?.("margins")}
-                  className="w-full text-left p-2.5 rounded-xl bg-slate-800/70 hover:bg-slate-800 border border-slate-700 hover:border-slate-600 text-white transition-all group"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-200 group-hover:text-white flex items-center gap-1.5">
-                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> Clamp to 0.45" Bleed
-                    </span>
-                    <span className="text-[10px] font-mono text-slate-400">Verify</span>
-                  </div>
-                  <p className="text-[10.5px] text-slate-400 mt-1 leading-snug">
-                    Guarantees all elements sit strictly within physical print bleed constraints.
-                  </p>
-                </button>
-              </div>
+        {/* TAB 2: OUTLINE */}
+        {activeTab === "outline" && (
+          <div className="space-y-2">
+            <div className="px-1 text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">
+              Document Outline
             </div>
 
-            {/* Live Design Decisions Stream */}
-            {designReasoning && (
-              <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-3 space-y-2">
-                <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-indigo-400">
-                  Dia Designist Reasoning
-                </span>
-                <div className="text-[11px] text-slate-300 space-y-1">
-                  <div>
-                    <span className="text-slate-500">Archetype: </span>
-                    <span className="font-semibold text-white">{designReasoning.documentType}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-500">Grid: </span>
-                    <span className="font-mono text-slate-300 text-[10px]">{designReasoning.gridSystem}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-500">Typography: </span>
-                    <span className="text-slate-300">{designReasoning.typographyPairing}</span>
-                  </div>
-                </div>
+            {outlineItems.length === 0 ? (
+              <p className="text-xs text-zinc-500 italic px-1">No structural sections yet.</p>
+            ) : (
+              <div className="space-y-1">
+                {outlineItems.map((el) => {
+                  const isSelected = el.id === selectedElementId;
+                  const label =
+                    el.content?.title || (typeof el.content === "string" ? el.content.slice(0, 30) : el.type);
+
+                  return (
+                    <button
+                      key={el.id}
+                      onClick={() => onSelectElement(el.id)}
+                      className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center gap-2 transition-colors ${
+                        isSelected
+                          ? "bg-indigo-600/20 text-indigo-300 border border-indigo-500/40"
+                          : "text-zinc-300 hover:bg-white/[0.06] hover:text-white"
+                      }`}
+                    >
+                      {el.type === "heading" && <Hash className="w-3.5 h-3.5 text-zinc-400 shrink-0" />}
+                      {el.type === "formula" && <Sigma className="w-3.5 h-3.5 text-indigo-400 shrink-0" />}
+                      {el.type === "callout" && <Lightbulb className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
+                      {el.type === "chart" && <BarChart3 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />}
+                      <span className="truncate font-medium">{label}</span>
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
         )}
 
-        {/* TAB 2: ARCHITECTURAL BLOCKS */}
-        {activeTab === "components" && (
-          <div className="space-y-4">
-            {/* Math & Formulas */}
+        {/* TAB 3: INSERT COMPONENTS */}
+        {activeTab === "insert" && (
+          <div className="space-y-3">
+            {/* Category: Typography & Titles */}
             <div>
-              <h4 className="text-[10px] font-mono font-bold text-indigo-400 uppercase tracking-wider mb-2">
-                Math & LaTeX Rigor
-              </h4>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider mb-1.5 px-1">
+                Typography
+              </div>
+              <div className="grid grid-cols-2 gap-1.5">
                 <button
-                  onClick={() => createSmartElement("formula")}
-                  className="p-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-left hover:border-indigo-500 hover:bg-slate-800 transition-all group"
+                  onClick={() => handleInsert("heading")}
+                  className="p-2 rounded-lg bg-[#18191e] border border-white/[0.06] hover:border-white/[0.15] hover:bg-[#202228] text-left transition-all group"
                 >
-                  <Sigma className="w-4 h-4 text-indigo-400 mb-1" />
-                  <div className="text-xs font-bold text-slate-100">Hero Formula</div>
-                  <div className="text-[10px] text-slate-400">KaTeX card</div>
+                  <div className="flex items-center gap-1.5 text-zinc-200 group-hover:text-white text-xs font-medium">
+                    <FileText className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Heading</span>
+                  </div>
+                  <span className="text-[10px] text-zinc-400 block mt-0.5">Section header</span>
                 </button>
+
                 <button
-                  onClick={() => createSmartElement("callout")}
-                  className="p-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-left hover:border-indigo-500 hover:bg-slate-800 transition-all group"
+                  onClick={() => handleInsert("text")}
+                  className="p-2 rounded-lg bg-[#18191e] border border-white/[0.06] hover:border-white/[0.15] hover:bg-[#202228] text-left transition-all group"
                 >
-                  <Sparkles className="w-4 h-4 text-amber-400 mb-1" />
-                  <div className="text-xs font-bold text-slate-100">Key Takeaway</div>
-                  <div className="text-[10px] text-slate-400">High-contrast</div>
+                  <div className="flex items-center gap-1.5 text-zinc-200 group-hover:text-white text-xs font-medium">
+                    <PenTool className="w-3.5 h-3.5 text-zinc-400" />
+                    <span>Paragraph</span>
+                  </div>
+                  <span className="text-[10px] text-zinc-400 block mt-0.5">Markdown notes</span>
                 </button>
               </div>
             </div>
 
-            {/* Structure & Typography */}
+            {/* Category: KaTeX Formulas & Math */}
             <div>
-              <h4 className="text-[10px] font-mono font-bold text-cyan-400 uppercase tracking-wider mb-2">
-                Structure & Flow
-              </h4>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider mb-1.5 px-1">
+                Math & Formulas
+              </div>
+              <div className="grid grid-cols-2 gap-1.5">
                 <button
-                  onClick={() => createSmartElement("heading")}
-                  className="p-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-left hover:border-cyan-500 hover:bg-slate-800 transition-all group"
+                  onClick={() => handleInsert("formula")}
+                  className="p-2 rounded-lg bg-[#18191e] border border-white/[0.06] hover:border-white/[0.15] hover:bg-[#202228] text-left transition-all group"
                 >
-                  <Heading className="w-4 h-4 text-cyan-400 mb-1" />
-                  <div className="text-xs font-bold text-slate-100">Heading & Badge</div>
-                  <div className="text-[10px] text-slate-400">Section title</div>
+                  <div className="flex items-center gap-1.5 text-zinc-200 group-hover:text-white text-xs font-medium">
+                    <Sigma className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Formula</span>
+                  </div>
+                  <span className="text-[10px] text-zinc-400 block mt-0.5">LaTeX + KaTeX</span>
                 </button>
+
                 <button
-                  onClick={() => createSmartElement("text")}
-                  className="p-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-left hover:border-cyan-500 hover:bg-slate-800 transition-all group"
+                  onClick={() => handleInsert("callout")}
+                  className="p-2 rounded-lg bg-[#18191e] border border-white/[0.06] hover:border-white/[0.15] hover:bg-[#202228] text-left transition-all group"
                 >
-                  <Type className="w-4 h-4 text-cyan-400 mb-1" />
-                  <div className="text-xs font-bold text-slate-100">Text Bento</div>
-                  <div className="text-[10px] text-slate-400">Body column</div>
-                </button>
-                <button
-                  onClick={() => createSmartElement("table")}
-                  className="p-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-left hover:border-cyan-500 hover:bg-slate-800 transition-all group"
-                >
-                  <TableIcon className="w-4 h-4 text-emerald-400 mb-1" />
-                  <div className="text-xs font-bold text-slate-100">Data Matrix</div>
-                  <div className="text-[10px] text-slate-400">Tabular figures</div>
-                </button>
-                <button
-                  onClick={() => createSmartElement("diagram")}
-                  className="p-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-left hover:border-cyan-500 hover:bg-slate-800 transition-all group"
-                >
-                  <Workflow className="w-4 h-4 text-pink-400 mb-1" />
-                  <div className="text-xs font-bold text-slate-100">Step Pipeline</div>
-                  <div className="text-[10px] text-slate-400">Multi-stage flow</div>
+                  <div className="flex items-center gap-1.5 text-zinc-200 group-hover:text-white text-xs font-medium">
+                    <Lightbulb className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Callout</span>
+                  </div>
+                  <span className="text-[10px] text-zinc-400 block mt-0.5">Key takeaway</span>
                 </button>
               </div>
             </div>
 
-            {/* Practice & Workspace */}
+            {/* Category: Data & Visuals */}
             <div>
-              <h4 className="text-[10px] font-mono font-bold text-emerald-400 uppercase tracking-wider mb-2">
-                Pedagogy & Synthesis
-              </h4>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider mb-1.5 px-1">
+                Visuals & Data
+              </div>
+              <div className="grid grid-cols-2 gap-1.5">
                 <button
-                  onClick={() => createSmartElement("writingLines")}
-                  className="p-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-left hover:border-emerald-500 hover:bg-slate-800 transition-all group"
+                  onClick={() => handleInsert("chart")}
+                  className="p-2 rounded-lg bg-[#18191e] border border-white/[0.06] hover:border-white/[0.15] hover:bg-[#202228] text-left transition-all group"
                 >
-                  <PenTool className="w-4 h-4 text-emerald-400 mb-1" />
-                  <div className="text-xs font-bold text-slate-100">Ruled Pad</div>
-                  <div className="text-[10px] text-slate-400">Synthesis lines</div>
+                  <div className="flex items-center gap-1.5 text-zinc-200 group-hover:text-white text-xs font-medium">
+                    <BarChart3 className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Chart</span>
+                  </div>
+                  <span className="text-[10px] text-zinc-400 block mt-0.5">Data trajectory</span>
                 </button>
+
                 <button
-                  onClick={() => createSmartElement("checkboxGroup")}
-                  className="p-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-left hover:border-emerald-500 hover:bg-slate-800 transition-all group"
+                  onClick={() => handleInsert("diagram")}
+                  className="p-2 rounded-lg bg-[#18191e] border border-white/[0.06] hover:border-white/[0.15] hover:bg-[#202228] text-left transition-all group"
                 >
-                  <CheckSquare className="w-4 h-4 text-emerald-400 mb-1" />
-                  <div className="text-xs font-bold text-slate-100">Rubric / Checks</div>
-                  <div className="text-[10px] text-slate-400">Verification list</div>
+                  <div className="flex items-center gap-1.5 text-zinc-200 group-hover:text-white text-xs font-medium">
+                    <Workflow className="w-3.5 h-3.5 text-purple-400" />
+                    <span>Diagram</span>
+                  </div>
+                  <span className="text-[10px] text-zinc-400 block mt-0.5">Process steps</span>
+                </button>
+
+                <button
+                  onClick={() => handleInsert("table")}
+                  className="p-2 rounded-lg bg-[#18191e] border border-white/[0.06] hover:border-white/[0.15] hover:bg-[#202228] text-left transition-all group"
+                >
+                  <div className="flex items-center gap-1.5 text-zinc-200 group-hover:text-white text-xs font-medium">
+                    <TableIcon className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Table</span>
+                  </div>
+                  <span className="text-[10px] text-zinc-400 block mt-0.5">Matrix rows</span>
+                </button>
+
+                <button
+                  onClick={() => handleInsert("checkboxGroup")}
+                  className="p-2 rounded-lg bg-[#18191e] border border-white/[0.06] hover:border-white/[0.15] hover:bg-[#202228] text-left transition-all group"
+                >
+                  <div className="flex items-center gap-1.5 text-zinc-200 group-hover:text-white text-xs font-medium">
+                    <CheckSquare className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Checklist</span>
+                  </div>
+                  <span className="text-[10px] text-zinc-400 block mt-0.5">Action list</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Category: Educational & Ruled Lines */}
+            <div>
+              <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider mb-1.5 px-1">
+                Worksheet Elements
+              </div>
+              <div className="grid grid-cols-2 gap-1.5">
+                <button
+                  onClick={() => handleInsert("writingLines")}
+                  className="p-2 rounded-lg bg-[#18191e] border border-white/[0.06] hover:border-white/[0.15] hover:bg-[#202228] text-left transition-all group"
+                >
+                  <div className="flex items-center gap-1.5 text-zinc-200 group-hover:text-white text-xs font-medium">
+                    <PenTool className="w-3.5 h-3.5 text-zinc-400" />
+                    <span>Ruled Lines</span>
+                  </div>
+                  <span className="text-[10px] text-zinc-400 block mt-0.5">Hand-writing</span>
+                </button>
+
+                <button
+                  onClick={() => handleInsert("drawingArea")}
+                  className="p-2 rounded-lg bg-[#18191e] border border-white/[0.06] hover:border-white/[0.15] hover:bg-[#202228] text-left transition-all group"
+                >
+                  <div className="flex items-center gap-1.5 text-zinc-200 group-hover:text-white text-xs font-medium">
+                    <LayoutTemplate className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Scratchpad</span>
+                  </div>
+                  <span className="text-[10px] text-zinc-400 block mt-0.5">Freeform canvas</span>
                 </button>
               </div>
             </div>
           </div>
         )}
 
-        {/* TAB 3: SPATIAL HIERARCHY & OUTLINE */}
-        {activeTab === "outline" && (
-          <div className="space-y-3">
-            <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-400 space-y-1.5">
-              <div className="flex items-center justify-between font-bold text-white">
-                <span>Spatial Reading Order</span>
-                <span className="text-[10px] bg-indigo-950 text-indigo-300 border border-indigo-800 px-2 py-0.5 rounded-full font-mono">
-                  {doc?.elements?.length || 0} Nodes
-                </span>
-              </div>
-              <div className="grid grid-cols-2 gap-1 text-[11px] text-slate-400 pt-1 border-t border-slate-800">
-                <div>Page: <span className="font-mono text-slate-200">8.5" × 11"</span></div>
-                <div>Bleed: <span className="font-mono text-emerald-400">0.45" Locked</span></div>
-              </div>
+        {/* TAB 4: TEMPLATES */}
+        {activeTab === "templates" && (
+          <div className="space-y-2">
+            <div className="px-1 text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">
+              Curated Templates
             </div>
 
-            {/* Element Outline Items */}
-            <div className="space-y-1">
-              {(!doc?.elements || doc.elements.length === 0) ? (
-                <div className="text-xs text-slate-500 italic p-3 text-center">
-                  Canvas is empty
+            <div className="space-y-1.5">
+              <button
+                onClick={() => onApplyPreset("compound-interest")}
+                className="w-full text-left p-2.5 rounded-xl bg-[#18191e] border border-white/[0.06] hover:border-white/[0.15] hover:bg-[#202228] transition-all"
+              >
+                <div className="font-semibold text-xs text-white">Financial Research Report</div>
+                <div className="text-[11px] text-zinc-400 mt-0.5 leading-snug">
+                  US Letter document with KaTeX formulas, compounding charts, and sensitivity tables.
                 </div>
-              ) : (
-                [...doc.elements]
-                  .sort((a, b) => {
-                    if (Math.abs(a.y - b.y) > 0.4) return a.y - b.y;
-                    return a.x - b.x;
-                  })
-                  .map((el, idx) => {
-                    const isSelected = selectedElementId === el.id;
-                    let displayTitle: string = el.type;
-                    if (el.content?.title) {
-                      displayTitle = el.content.title;
-                    } else if (el.content?.equation) {
-                      displayTitle = `Eq: ${el.content.equation}`;
-                    } else if (typeof el.content === "string") {
-                      displayTitle = el.content.slice(0, 30);
-                    }
+                <span className="inline-block mt-1.5 text-[9px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300">
+                  Document Mode
+                </span>
+              </button>
 
-                    return (
-                      <button
-                        key={el.id}
-                        onClick={() => onSelectElement?.(el.id)}
-                        className={`w-full text-left p-2 rounded-lg text-xs transition-all flex items-start gap-2 border ${
-                          isSelected
-                            ? "bg-indigo-950/80 border-indigo-500 text-white font-bold shadow-sm"
-                            : "bg-slate-800/40 hover:bg-slate-800 border-slate-800 text-slate-300"
-                        }`}
-                      >
-                        <span className="text-[10px] font-mono font-bold text-indigo-400 mt-0.5 shrink-0">
-                          {String(idx + 1).padStart(2, "0")}
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate leading-tight">{displayTitle}</div>
-                          <div className="text-[10px] text-slate-500 font-mono flex items-center gap-1.5 mt-0.5">
-                            <span className="capitalize text-slate-400">{el.type}</span>
-                            <span>•</span>
-                            <span>{el.x.toFixed(1)}", {el.y.toFixed(1)}"</span>
-                          </div>
-                        </div>
-                      </button>
-                    );
-                  })
-              )}
+              <button
+                onClick={() => onApplyPreset("presentation-deck")}
+                className="w-full text-left p-2.5 rounded-xl bg-[#18191e] border border-white/[0.06] hover:border-white/[0.15] hover:bg-[#202228] transition-all"
+              >
+                <div className="font-semibold text-xs text-white">16:9 Strategic Pitch Deck</div>
+                <div className="text-[11px] text-zinc-400 mt-0.5 leading-snug">
+                  3-slide presentation deck with high-impact value cards, benchmarks, and roadmap.
+                </div>
+                <span className="inline-block mt-1.5 text-[9px] font-mono px-1.5 py-0.5 rounded bg-indigo-950/60 text-indigo-300 border border-indigo-800/40">
+                  Presentation Mode
+                </span>
+              </button>
+
+              <button
+                onClick={() => onApplyPreset("worksheet-calculus")}
+                className="w-full text-left p-2.5 rounded-xl bg-[#18191e] border border-white/[0.06] hover:border-white/[0.15] hover:bg-[#202228] transition-all"
+              >
+                <div className="font-semibold text-xs text-white">Physics Kinetics Worksheet</div>
+                <div className="text-[11px] text-zinc-400 mt-0.5 leading-snug">
+                  Problem set with kinematic formulas, derivation steps, and freeform scratchpad.
+                </div>
+                <span className="inline-block mt-1.5 text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-950/60 text-emerald-300 border border-emerald-800/40">
+                  Worksheet Mode
+                </span>
+              </button>
+
+              <button
+                onClick={() => onApplyPreset("executive-memo")}
+                className="w-full text-left p-2.5 rounded-xl bg-[#18191e] border border-white/[0.06] hover:border-white/[0.15] hover:bg-[#202228] transition-all"
+              >
+                <div className="font-semibold text-xs text-white">Executive Strategic Memo</div>
+                <div className="text-[11px] text-zinc-400 mt-0.5 leading-snug">
+                  Dense one-pager memo with ARR expansion trajectory, milestones, and checklists.
+                </div>
+                <span className="inline-block mt-1.5 text-[9px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300">
+                  One-Pager Mode
+                </span>
+              </button>
             </div>
           </div>
         )}
