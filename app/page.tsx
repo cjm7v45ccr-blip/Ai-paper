@@ -13,6 +13,7 @@ import {
 } from "@/lib/sample-document";
 import { buildComprehensiveDocumentFromPrompt } from "@/lib/smart-layout-architect";
 import { triggerPrint } from "@/lib/print";
+import { Sparkles } from "lucide-react";
 
 import { GammaStyleHomepage } from "@/components/home/GammaStyleHomepage";
 import { GenerationSteppedScreen } from "@/components/home/GenerationSteppedScreen";
@@ -40,6 +41,7 @@ export default function PagePilotApp() {
   // AI & Generation States
   const [activePrompt, setActivePrompt] = useState("");
   const [isAiLoading, setIsAiLoading] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   // Presentation & Export Modals
   const [isPresenterOpen, setIsPresenterOpen] = useState(false);
@@ -143,28 +145,35 @@ export default function PagePilotApp() {
           setHistoryIndex(0);
           setActivePageIndex(0);
           setSelectedElementId(null);
+          if (data.message) {
+            setStatusMessage(data.message);
+            setTimeout(() => setStatusMessage(null), 4000);
+          }
         }
       } else {
-        // Deterministic fallback
+        const errorData = await response.json().catch(() => ({}));
+        console.warn("AI generation endpoint error:", errorData);
+        // Fallback for resilient offline experience
         const fallback = buildComprehensiveDocumentFromPrompt(prompt, mode);
         setDocumentState(fallback);
         setHistory([fallback]);
         setHistoryIndex(0);
         setActivePageIndex(0);
+        setStatusMessage("Generated draft using offline layout architect.");
+        setTimeout(() => setStatusMessage(null), 4000);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.warn("AI generation network fallback:", err);
       const fallback = buildComprehensiveDocumentFromPrompt(prompt, mode);
       setDocumentState(fallback);
       setHistory([fallback]);
       setHistoryIndex(0);
       setActivePageIndex(0);
+      setStatusMessage("Generated draft using offline layout architect.");
+      setTimeout(() => setStatusMessage(null), 4000);
     } finally {
-      // Small pause so the user perceives the finish of generation smoothly
-      setTimeout(() => {
-        setIsAiLoading(false);
-        setCurrentView("editor");
-      }, 1200);
+      setIsAiLoading(false);
+      setCurrentView("editor");
     }
   };
 
@@ -501,10 +510,20 @@ export default function PagePilotApp() {
         const data = await response.json();
         if (data.document) {
           pushToHistory(data.document);
+          if (data.message) {
+            setStatusMessage(data.message);
+            setTimeout(() => setStatusMessage(null), 4000);
+          }
         }
+      } else {
+        const err = await response.json().catch(() => ({}));
+        setStatusMessage(err.error || "AI modification failed. Please try again.");
+        setTimeout(() => setStatusMessage(null), 4000);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.warn("AI prompt error:", err);
+      setStatusMessage("Network error communicating with AI endpoint.");
+      setTimeout(() => setStatusMessage(null), 4000);
     } finally {
       setIsAiLoading(false);
     }
@@ -644,6 +663,14 @@ export default function PagePilotApp() {
           isAiLoading={isAiLoading}
         />
       </div>
+
+      {/* Real-time AI Status Notification */}
+      {statusMessage && (
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-[#161822]/95 border border-indigo-500/30 text-white text-xs px-4 py-2.5 rounded-full shadow-2xl backdrop-blur-md flex items-center gap-2">
+          <Sparkles className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+          <span>{statusMessage}</span>
+        </div>
+      )}
 
       {/* 3. Floating Bottom AI Prompt Bar */}
       <MinimalAiPromptBar

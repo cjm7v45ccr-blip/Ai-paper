@@ -1,51 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getGeminiClient, getGeminiModelName } from "@/lib/gemini";
-import { AIResponseSchema } from "@/lib/document-schema";
-import { DocumentModel, DocumentElement, Operation, DocumentMode } from "@/types/document";
-import { autoFixSafeMargins, autoFixOverlaps } from "@/lib/quality-checks";
-import { INITIAL_SAMPLE_DOCUMENT, SAMPLE_PRESENTATION_DECK, SAMPLE_WORKSHEET, SAMPLE_ONE_PAGER } from "@/lib/sample-document";
-import {
-  autoDesignDocument,
-  buildChemistryMeasurementGuide,
-  buildComprehensiveDocumentFromPrompt,
-} from "@/lib/smart-layout-architect";
+import { callGeminiWithFallback } from "@/lib/gemini";
+import { DocumentModel, DocumentElement, DocumentMode, PageData } from "@/types/document";
 
 export const dynamic = "force-dynamic";
 
-const LAYOUT_SYSTEM_INSTRUCTION = `
-You are PagePilot, an elite AI visual document & presentation architect (inspired by the best traits of Apple design minimalism and Gamma intelligence).
-You help users design publication-grade 8.5x11 documents and 16:9 widescreen presentation decks.
-Your job is to reason deeply about structure, typography, optical spacing, KaTeX formulas, tables, charts, and bento grids.
-
-DOCUMENT & PRESENTATION RULES:
-1. When mode is "presentation", page dimensions are 13.333" x 7.5" (16:9 Widescreen). All X coordinates must be within [0.5, 12.83], Y within [0.5, 7.0].
-2. When mode is "document", "worksheet", or "one-pager", page dimensions are 8.5" x 11.0" (US Letter). Safe Margins: 0.45" on all 4 borders. (Valid X: 0.45 to 8.05. Valid Y: 0.45 to 10.55).
-3. FORMULA RIGOR: Convert mathematical equations into styled formula cards with clean KaTeX notation.
-4. TYPOGRAPHY: Pair strong display headings with legible body copy. Avoid messy numbering.
-5. COLOR: Restrained, sophisticated palettes (Titanium Dark, Clean Indigo, Executive Slate, Emerald Lab).
-
-RESPONSE JSON FORMAT:
-{
-  "message": "Friendly conversational summary of changes made (1-2 sentences)",
-  "designReasoning": {
-    "documentType": "e.g. 16:9 Strategic Keynote Presentation",
-    "gridSystem": "e.g. 3-column balanced bento grid",
-    "typographyPairing": "e.g. Inter Display + Tabular Numerals",
-    "colorPalette": "e.g. Dark Titanium Slate",
-    "semanticComponents": ["List of components generated"],
-    "printSafety": "100% compliant with safe margins"
-  },
-  "operations": [
-    { "action": "add", "element": { ... } },
-    { "action": "update", "id": "element-id", "changes": { ... } },
-    { "action": "delete", "id": "element-id" },
-    { "action": "replace", "elements": [ ... ] }
-  ],
-  "qualityChecks": []
-}
-`;
-
-function repairJsonString(raw: string): string {
+function cleanJson(raw: string): string {
   let cleaned = raw.trim();
   if (cleaned.startsWith("```json")) {
     cleaned = cleaned.replace(/^```json\s*/i, "").replace(/\s*```$/, "");
@@ -60,374 +19,219 @@ function repairJsonString(raw: string): string {
   return cleaned;
 }
 
+const AI_CREATION_SYSTEM_PROMPT = `You are PagePilot, an elite AI presentation and document builder inspired by the minimalist craft of Apple and the intelligent structuring of Gamma.
+Your job is to generate real, publication-grade structured content and layout data based on the user's prompt.
+
+You must return strictly valid JSON matching this exact schema:
+{
+  "title": "String (engaging, professional title for the project)",
+  "message": "String (1-2 sentences summarizing the generated content and focus areas)",
+  "pages": [
+    {
+      "id": "page-1",
+      "title": "String (e.g. Executive Overview, Problem Statement, Solution Architecture, Market Opportunity)",
+      "elements": [
+        {
+          "id": "heading-1",
+          "type": "heading",
+          "x": 0.8,
+          "y": 0.8,
+          "width": 10,
+          "height": 1.2,
+          "zIndex": 1,
+          "content": {
+            "title": "Clear Slide/Section Headline",
+            "subtitle": "Informative 1-2 sentence narrative explanation.",
+            "badge": "OPTIONAL CATEGORY"
+          }
+        },
+        {
+          "id": "card-1",
+          "type": "callout",
+          "x": 0.8,
+          "y": 2.2,
+          "width": 5.5,
+          "height": 2.0,
+          "zIndex": 2,
+          "content": {
+            "title": "Specific Card Heading",
+            "text": "Detailed, high-quality, factual insight directly related to the user's topic."
+          }
+        }
+      ]
+    }
+  ]
+}
+
+Supported element types for pages:
+- "heading": content has "title", "subtitle", "badge"
+- "callout": content has "title", "text"
+- "text": content has "title", "text"
+- "formula": content has "title", "equation" (standard LaTeX KaTeX formula string e.g. "E = mc^2"), "breakdown" (array of { "symbol": "...", "label": "..." })
+- "table": content has "title", "headers" (array of column header strings), "rows" (array of string arrays)
+- "chart": content has "title", "data" (array of { "label": "...", "value": number })
+- "checkboxGroup": content has "title", "items" (array of { "text": "...", "checked": boolean })
+
+DESIGN RULES:
+- Never generate placeholders or generic lorem ipsum text. Write real, deeply relevant, intelligent content for the specific topic requested.
+- Generate 3 to 4 complete pages/slides for presentations or 2 to 3 sections for documents.
+- Each page MUST start with 1 "heading" element, followed by 2 to 4 distinct body elements (mix of callouts, tables, formulas, checklists, or charts to keep layouts visually engaging).
+- Keep content concise, high-signal, and executive-ready.`;
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const {
       prompt,
       actionType,
-      currentDocument,
+      documentMode = "presentation",
       documentState,
       selectedElementId,
-      mode,
-      documentMode,
       activePageIndex = 0,
-      chatHistory,
-      targetTone,
-      targetLanguage,
     } = body;
 
-    const activeDoc: DocumentModel =
-      documentState || currentDocument || INITIAL_SAMPLE_DOCUMENT;
-    const currentMode: DocumentMode =
-      documentMode || mode || activeDoc.mode || "document";
-
-    if (!prompt && !actionType) {
-      return NextResponse.json({ error: "Prompt or actionType is required" }, { status: 400 });
-    }
-
-    // 1. ACTION: Create Full Document / Presentation from Prompt (Primary Hero AI Workflow)
-    if (actionType === "create_from_prompt") {
-      const apiKey = process.env.GEMINI_API_KEY;
-
-      if (apiKey) {
-        try {
-          const ai = getGeminiClient();
-          const model = getGeminiModelName();
-
-          const promptInstruction = `The user wants to create a new ${currentMode} from scratch on the topic: "${prompt}".
-Generate a complete, production-ready ${currentMode} with 3 to 5 distinct pages/slides.
-Each slide/page must have a title, well-spaced layout, relevant content blocks (headings, callout cards, KaTeX formulas, tables, charts, or checklists).
-Dimensions for ${currentMode}: ${
-            currentMode === "presentation"
-              ? "13.333\" x 7.5\" (16:9 widescreen). Keep all elements within X: [0.6, 12.7], Y: [0.6, 6.9]."
-              : "8.5\" x 11.0\" (US Letter). Keep all elements within safe margins X: [0.5, 7.9], Y: [0.5, 10.4]."
-          }
-Return JSON strictly conforming to the layout schema with full pages array.`;
-
-          const response = await ai.models.generateContent({
-            model,
-            contents: promptInstruction,
-            config: {
-              systemInstruction: LAYOUT_SYSTEM_INSTRUCTION,
-              responseMimeType: "application/json",
-              temperature: 0.3,
-            },
-          });
-
-          const rawText = response.text || "{}";
-          const cleanedJson = repairJsonString(rawText);
-          const parsed = JSON.parse(cleanedJson);
-
-          if (parsed.pages && Array.isArray(parsed.pages) && parsed.pages.length > 0) {
-            return NextResponse.json({
-              message: parsed.message || `Created a new ${currentMode} for "${prompt}".`,
-              document: {
-                ...activeDoc,
-                title: parsed.title || prompt.slice(0, 45),
-                mode: currentMode,
-                pages: parsed.pages,
-                elements: parsed.pages[0]?.elements || [],
-              },
-              designReasoning: parsed.designReasoning,
-              operations: [],
-            });
-          }
-        } catch (err) {
-          console.warn("Gemini creation failed, using high-craft deterministic generator:", err);
-        }
-      }
-
-      // High-Craft Deterministic Generative Synthesis Fallback
-      const generated = buildComprehensiveDocumentFromPrompt(prompt, currentMode);
-      return NextResponse.json({
-        message: `Synthesized a ${currentMode} for "${prompt}" with KaTeX formulas, metric cards, and verified safe spacing.`,
-        document: generated,
-        operations: [],
-        designReasoning: {
-          documentType: `${currentMode.toUpperCase()} Publication`,
-          gridSystem: currentMode === "presentation" ? "16:9 Widescreen Bento" : "2-Column Publication Grid",
-          typographyPairing: "Inter Display + Tabular Figures",
-          colorPalette: currentMode === "presentation" ? "Titanium Dark" : "Executive Slate",
-          semanticComponents: ["Executive Abstract", "KaTeX Governing Equation", "Telemetry Metric Chart", "Milestone Matrix"],
-          printSafety: "100% compliant with 0.45\" margins",
+    const apiKey = process.env.GEMINI_API_KEY || process.env.AI_API_KEY;
+    if (!apiKey) {
+      return NextResponse.json(
+        {
+          error: "AI_API_KEY or GEMINI_API_KEY environment variable is not configured on the server.",
         },
-      });
+        { status: 500 }
+      );
     }
 
-    // 2. ACTION: Content Transformation (Rewrite, Change Tone, Translate)
-    if (actionType === "rewrite" || actionType === "change_tone" || actionType === "translate") {
-      const apiKey = process.env.GEMINI_API_KEY;
-      const targetElement = activeDoc.pages?.[activePageIndex]?.elements?.find((el) => el.id === selectedElementId) ||
-        activeDoc.elements.find((el) => el.id === selectedElementId);
+    // 1. PRIMARY FLOW: Create from natural language prompt
+    if (actionType === "create_from_prompt" || (!actionType && prompt)) {
+      const modeInstruction =
+        documentMode === "presentation"
+          ? "Create a 16:9 widescreen presentation deck (3-4 slides). Each slide represents a slide in a deck."
+          : "Create an 8.5x11 publication document (2-3 structured sections).";
 
-      if (!targetElement) {
-        return NextResponse.json({
-          message: "Please select an element on the canvas to transform.",
-          operations: [],
-        });
-      }
+      const promptContents = `Format: ${documentMode.toUpperCase()}\n${modeInstruction}\n\nUSER TOPIC & INSTRUCTIONS:\n"${prompt}"\n\nGenerate the complete structured JSON with all pages and elements now.`;
 
-      let transformInstruction = "";
-      if (actionType === "rewrite") {
-        transformInstruction = `Rewrite this content to be clearer, more concise, and impactful while preserving core facts: ${JSON.stringify(targetElement.content)}`;
-      } else if (actionType === "change_tone") {
-        transformInstruction = `Rewrite this content with a strictly ${targetTone || "executive and authoritative"} tone: ${JSON.stringify(targetElement.content)}`;
-      } else if (actionType === "translate") {
-        transformInstruction = `Translate this content accurately into ${targetLanguage || "Spanish"}: ${JSON.stringify(targetElement.content)}`;
-      }
+      const rawJson = await callGeminiWithFallback({
+        contents: promptContents,
+        systemInstruction: AI_CREATION_SYSTEM_PROMPT,
+        responseMimeType: "application/json",
+        temperature: 0.25,
+      });
 
-      if (apiKey) {
-        try {
-          const ai = getGeminiClient();
-          const model = getGeminiModelName();
-          const response = await ai.models.generateContent({
-            model,
-            contents: `${transformInstruction}\nReturn JSON with single key "content" containing the updated object or string.`,
-            config: { responseMimeType: "application/json" },
-          });
+      const parsed = JSON.parse(cleanJson(rawJson));
 
-          const parsed = JSON.parse(repairJsonString(response.text || "{}"));
-          if (parsed.content) {
-            return NextResponse.json({
-              message: `Transformed element content (${actionType}).`,
-              operations: [
-                {
-                  action: "update",
-                  id: targetElement.id,
-                  changes: { content: parsed.content },
-                  pageIndex: activePageIndex,
-                },
-              ],
-            });
-          }
-        } catch (err) {
-          console.warn("Content transform API error:", err);
-        }
-      }
+      if (parsed.pages && Array.isArray(parsed.pages) && parsed.pages.length > 0) {
+        // Ensure each page and element has valid layout IDs and default styling
+        const sanitizedPages: PageData[] = parsed.pages.map((p: any, pIdx: number) => ({
+          id: p.id || `page-${pIdx + 1}`,
+          title: p.title || `Slide ${pIdx + 1}`,
+          elements: (p.elements || []).map((el: any, elIdx: number) => ({
+            id: el.id || `elem-${pIdx + 1}-${elIdx + 1}`,
+            type: el.type || "text",
+            x: typeof el.x === "number" ? el.x : 0.8,
+            y: typeof el.y === "number" ? el.y : 1.5 + elIdx * 1.5,
+            width: typeof el.width === "number" ? el.width : 5.5,
+            height: typeof el.height === "number" ? el.height : 2.0,
+            zIndex: el.zIndex || elIdx + 1,
+            content: el.content || {},
+            style: el.style || {},
+            metadata: el.metadata || {},
+          })),
+        }));
 
-      // Deterministic transformation fallback
-      let newContent = { ...targetElement.content };
-      if (typeof targetElement.content === "string") {
-        newContent = `${targetElement.content} [Refined]`;
-      } else if (targetElement.content?.body) {
-        newContent.body = `${targetElement.content.body} (Refined for ${targetTone || "executive clarity"})`;
-      }
-
-      return NextResponse.json({
-        message: `Updated content styling and clarity (${actionType}).`,
-        operations: [
-          {
-            action: "update",
-            id: targetElement.id,
-            changes: { content: newContent },
-            pageIndex: activePageIndex,
+        const newDocument: DocumentModel = {
+          id: `doc-${Date.now()}`,
+          title: parsed.title || prompt.slice(0, 45),
+          mode: documentMode,
+          pages: sanitizedPages,
+          elements: sanitizedPages[0]?.elements || [],
+          page: {
+            size: documentMode === "presentation" ? "presentation-16-9" : "letter",
+            width: documentMode === "presentation" ? 13.333 : 8.5,
+            height: documentMode === "presentation" ? 7.5 : 11.0,
+            unit: "in",
+            safeMargin: 0.45,
+            background: "#11131a",
           },
-        ],
-      });
-    }
-
-    // 3. ACTION: Convert Document ↔ Presentation Mode
-    if (actionType === "convert_mode") {
-      const targetMode: DocumentMode = currentMode === "presentation" ? "document" : "presentation";
-      const converted = buildComprehensiveDocumentFromPrompt(activeDoc.title || "Document Overview", targetMode);
-
-      return NextResponse.json({
-        message: `Converted workspace into ${targetMode === "presentation" ? "16:9 Presentation Slides" : "8.5x11 Publication Document"}.`,
-        document: converted,
-        operations: [],
-      });
-    }
-
-    // 4. ACTION: General AI Prompt (Layout modification or conversational assistant)
-    const normalizedPrompt = (prompt || "").toLowerCase();
-
-    // Check for specific common commands
-    if (normalizedPrompt.includes("concise")) {
-      const pageToUpdate = activeDoc.pages?.[activePageIndex] || activeDoc.pages?.[0];
-      if (pageToUpdate) {
-        const updatedElements = pageToUpdate.elements.map((el) => {
-          if (el.type === "callout" || el.type === "quote" || el.type === "text") {
-            const currentText = typeof el.content === "string" ? el.content : el.content?.text || "";
-            // Shorten text to punchy version
-            const conciseText = currentText.split(".").slice(0, 2).join(".") + (currentText.includes(".") ? "." : "");
-            return {
-              ...el,
-              content: typeof el.content === "string" ? conciseText : { ...el.content, text: conciseText },
-            };
-          }
-          return el;
-        });
-
-        const updatedPages = [...(activeDoc.pages || [])];
-        updatedPages[activePageIndex] = { ...pageToUpdate, elements: updatedElements };
-
-        return NextResponse.json({
-          message: "Refined copy to be concise, scannable, and direct.",
-          document: { ...activeDoc, pages: updatedPages, elements: updatedElements },
-        });
-      }
-    }
-
-    if (normalizedPrompt.includes("professional") || normalizedPrompt.includes("tone")) {
-      const pageToUpdate = activeDoc.pages?.[activePageIndex] || activeDoc.pages?.[0];
-      if (pageToUpdate) {
-        const updatedElements = pageToUpdate.elements.map((el) => {
-          if (el.type === "heading" && el.content) {
-            return {
-              ...el,
-              metadata: { ...el.metadata, badge: "EXECUTIVE BRIEF" },
-            };
-          }
-          return el;
-        });
-
-        const updatedPages = [...(activeDoc.pages || [])];
-        updatedPages[activePageIndex] = { ...pageToUpdate, elements: updatedElements };
-
-        return NextResponse.json({
-          message: "Applied authoritative executive tone and typography adjustments.",
-          document: { ...activeDoc, pages: updatedPages, elements: updatedElements },
-        });
-      }
-    }
-
-    if (normalizedPrompt.includes("comparison")) {
-      const pageToUpdate = activeDoc.pages?.[activePageIndex] || activeDoc.pages?.[0];
-      if (pageToUpdate) {
-        const comparisonCard: DocumentElement = {
-          id: `comparison-${Date.now()}`,
-          type: "table",
-          x: 1,
-          y: 3,
-          width: 6,
-          height: 2.2,
-          zIndex: 3,
-          content: {
-            title: "Comparative Architectural Trade-Offs",
-            headers: ["Criteria", "Baseline Approach", "Optimized PagePilot Model"],
-            rows: [
-              ["Latency / Convergence", "320 ms average", "42 ms sub-linear bound"],
-              ["Computational Capex", "$18.4K / mo", "$4.1K / mo (78% savings)"],
-              ["Reliability & SLA", "99.2%", "99.99% with fault-isolation"],
-            ],
-          },
-          style: {
-            backgroundColor: "#161822",
-            borderColor: "rgba(255,255,255,0.1)",
-            borderWidth: 1,
-            borderRadius: 12,
-            padding: 12,
+          theme: {
+            name: "Titanium Slate",
+            headingFont: "Inter Display",
+            bodyFont: "Inter",
+            primaryColor: "#6366f1",
+            accentColor: "#10b981",
+            backgroundColor: "#11131a",
           },
         };
 
-        const updatedElements = [...pageToUpdate.elements, comparisonCard];
-        const updatedPages = [...(activeDoc.pages || [])];
-        updatedPages[activePageIndex] = { ...pageToUpdate, elements: updatedElements };
-
         return NextResponse.json({
-          message: "Added comparative evaluation matrix block.",
-          document: { ...activeDoc, pages: updatedPages, elements: updatedElements },
+          message: parsed.message || `Generated ${sanitizedPages.length} slides for "${prompt}".`,
+          document: newDocument,
         });
       }
+
+      throw new Error("Invalid format received from AI model.");
     }
 
-    if (normalizedPrompt.includes("visual")) {
-      const pageToUpdate = activeDoc.pages?.[activePageIndex] || activeDoc.pages?.[0];
-      if (pageToUpdate) {
-        const chartCard: DocumentElement = {
-          id: `visual-${Date.now()}`,
-          type: "chart",
-          x: 1,
-          y: 4,
-          width: 5.5,
-          height: 2.2,
-          zIndex: 3,
-          content: {
-            title: "Visual Performance & Scaling Trajectory",
-            data: [
-              { label: "Q1", value: 45 },
-              { label: "Q2", value: 85 },
-              { label: "Q3", value: 160 },
-              { label: "Q4", value: 240 },
-            ],
-          },
-          metadata: { chartType: "line" },
-          style: {
-            backgroundColor: "#161822",
-            borderColor: "rgba(255,255,255,0.1)",
-            borderWidth: 1,
-            borderRadius: 12,
-            padding: 12,
-          },
+    // 2. CONVERSATIONAL / CONTEXTUAL AI PROMPT (Prompt bar commands, refinements)
+    if (documentState) {
+      const activeDoc: DocumentModel = documentState;
+      const currentPage =
+        activeDoc.pages?.[activePageIndex] || activeDoc.pages?.[0];
+
+      const commandInstruction = `You are PagePilot. The user wants to modify an existing ${documentMode} in real-time.
+Current Document Title: "${activeDoc.title}"
+Active Page: "${currentPage?.title}"
+Elements on Active Page: ${JSON.stringify(currentPage?.elements || [], null, 2)}
+Selected Element ID: ${selectedElementId || "none"}
+
+USER COMMAND: "${prompt}"
+
+Return strictly valid JSON with:
+{
+  "message": "1-sentence summary of modifications applied",
+  "updatedPage": {
+    "id": "${currentPage?.id || "page-1"}",
+    "title": "Page title",
+    "elements": [ ...full updated list of elements for this page... ]
+  }
+}
+Keep the structure intact, applying the user's specific request (e.g. rewrite concisely, add a comparison table, adjust tone, add a new element, etc.).`;
+
+      const rawJson = await callGeminiWithFallback({
+        contents: commandInstruction,
+        systemInstruction: AI_CREATION_SYSTEM_PROMPT,
+        responseMimeType: "application/json",
+        temperature: 0.2,
+      });
+
+      const parsed = JSON.parse(cleanJson(rawJson));
+
+      if (parsed.updatedPage && Array.isArray(parsed.updatedPage.elements)) {
+        const updatedPages = [...(activeDoc.pages || [])];
+        const pageId = parsed.updatedPage.id || currentPage?.id || `page-${activePageIndex + 1}`;
+        const pageTitle = parsed.updatedPage.title || currentPage?.title || `Slide ${activePageIndex + 1}`;
+        updatedPages[activePageIndex] = {
+          id: pageId,
+          title: pageTitle,
+          elements: parsed.updatedPage.elements,
         };
 
-        const updatedElements = [...pageToUpdate.elements, chartCard];
-        const updatedPages = [...(activeDoc.pages || [])];
-        updatedPages[activePageIndex] = { ...pageToUpdate, elements: updatedElements };
-
         return NextResponse.json({
-          message: "Enhanced visual density with performance trajectory chart.",
-          document: { ...activeDoc, pages: updatedPages, elements: updatedElements },
-        });
-      }
-    }
-
-    if (normalizedPrompt.includes("remove") && (normalizedPrompt.includes("section") || normalizedPrompt.includes("card"))) {
-      const pageToUpdate = activeDoc.pages?.[activePageIndex] || activeDoc.pages?.[0];
-      if (pageToUpdate && pageToUpdate.elements.length > 1) {
-        // Remove the last body element
-        const updatedElements = pageToUpdate.elements.slice(0, pageToUpdate.elements.length - 1);
-        const updatedPages = [...(activeDoc.pages || [])];
-        updatedPages[activePageIndex] = { ...pageToUpdate, elements: updatedElements };
-
-        return NextResponse.json({
-          message: "Removed target section cleanly and re-balanced layout.",
-          document: { ...activeDoc, pages: updatedPages, elements: updatedElements },
-        });
-      }
-    }
-
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (apiKey) {
-      try {
-        const ai = getGeminiClient();
-        const model = getGeminiModelName();
-
-        const contextualPrompt = `CURRENT DOCUMENT STATE:\n${JSON.stringify(activeDoc, null, 2)}
-SELECTED ELEMENT: ${selectedElementId || "none"}
-MODE: ${currentMode}
-USER REQUEST: "${prompt}"
-Execute the user's intent. If modifying or adding elements, return operations. Keep coordinates within valid bounds for ${currentMode}.`;
-
-        const response = await ai.models.generateContent({
-          model,
-          contents: contextualPrompt,
-          config: {
-            systemInstruction: LAYOUT_SYSTEM_INSTRUCTION,
-            responseMimeType: "application/json",
-            temperature: 0.25,
+          message: parsed.message || `Updated active page.`,
+          document: {
+            ...activeDoc,
+            pages: updatedPages,
+            elements: updatedPages[activePageIndex].elements,
           },
         });
-
-        const parsed = JSON.parse(repairJsonString(response.text || "{}"));
-        return NextResponse.json(parsed);
-      } catch (err) {
-        console.warn("AI layout prompt failed, applying smart architect fallback:", err);
       }
     }
 
-    // Fallback Layout Execution
-    const designRes = autoDesignDocument(activeDoc, prompt);
-    return NextResponse.json({
-      message: designRes.message,
-      operations: [{ action: "replace", elements: designRes.document.elements }],
-      designReasoning: designRes.reasoning,
-    });
+    return NextResponse.json({ error: "No action performed" }, { status: 400 });
   } catch (error: any) {
-    console.error("Gemini route error:", error);
+    console.error("AI Generation Endpoint Error:", error);
     return NextResponse.json(
-      { error: error.message || "Internal server error" },
+      {
+        error: error?.message || "Failed to communicate with AI generation endpoint.",
+      },
       { status: 500 }
     );
   }
