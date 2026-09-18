@@ -56,6 +56,9 @@ export interface StudioHeaderProps {
   isPreviewMode: boolean;
   onTogglePreview: () => void;
   onOpenMarkdownMathModal?: () => void;
+  onOpenHeroCreation?: () => void;
+  onOpenPresenter?: () => void;
+  onTransformAction?: (action: string, param?: string) => void;
   onShare?: () => void;
   onExport?: (format: "pdf" | "png" | "json" | "markdown") => void;
 }
@@ -86,15 +89,20 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
   isPreviewMode,
   onTogglePreview,
   onOpenMarkdownMathModal,
+  onOpenHeroCreation,
+  onOpenPresenter,
+  onTransformAction,
   onShare,
   onExport,
 }) => {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [localTitle, setLocalTitle] = useState(title);
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
+  const [isTransformMenuOpen, setIsTransformMenuOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement>(null);
+  const transformMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setLocalTitle(title);
@@ -104,6 +112,9 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
     const handleClickOutside = (e: MouseEvent) => {
       if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
         setIsExportMenuOpen(false);
+      }
+      if (transformMenuRef.current && !transformMenuRef.current.contains(e.target as Node)) {
+        setIsTransformMenuOpen(false);
       }
     };
     window.addEventListener("mousedown", handleClickOutside);
@@ -280,6 +291,107 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
 
         {/* Right Section: Undo, Redo, Preview, Check, Share, Export */}
         <div className="flex items-center gap-1.5">
+          {/* New with AI Button */}
+          {onOpenHeroCreation && (
+            <button
+              onClick={onOpenHeroCreation}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-xs transition-all active:scale-[0.98] mr-1"
+              title="Create new Document or Presentation with AI"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-indigo-200" />
+              <span className="hidden sm:inline">New with AI</span>
+            </button>
+          )}
+
+          {/* Fullscreen Presenter Mode */}
+          {onOpenPresenter && (
+            <button
+              onClick={onOpenPresenter}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#18191e] border border-white/[0.07] hover:border-indigo-500/40 text-zinc-300 hover:text-white text-xs font-medium transition-colors"
+              title="Open Fullscreen Slide Presenter"
+            >
+              <Play className="w-3.5 h-3.5 fill-current text-indigo-400" />
+              <span className="hidden sm:inline">Present</span>
+            </button>
+          )}
+
+          {/* AI Transform Dropdown */}
+          <div className="relative" ref={transformMenuRef}>
+            <button
+              onClick={() => setIsTransformMenuOpen(!isTransformMenuOpen)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#18191e] border border-white/[0.07] hover:text-white text-zinc-300 text-xs font-medium transition-colors"
+              title="AI Transformation Menu"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+              <span className="hidden lg:inline">Transform</span>
+              <ChevronDown className="w-3 h-3 opacity-60" />
+            </button>
+
+            {isTransformMenuOpen && (
+              <div className="absolute right-0 mt-1.5 w-60 bg-[#18191e] border border-white/[0.1] rounded-xl shadow-2xl py-1 text-xs text-zinc-200 z-50 animate-in fade-in-50 zoom-in-95 duration-100">
+                <button
+                  onClick={() => {
+                    setIsTransformMenuOpen(false);
+                    onTransformAction?.("convert_mode");
+                  }}
+                  className="w-full text-left px-3 py-2 hover:bg-white/[0.08] flex items-center gap-2.5"
+                >
+                  <Layers className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                  <div>
+                    <div className="font-medium text-white">
+                      {documentMode === "presentation"
+                        ? "Convert to Document (8.5x11)"
+                        : "Convert to Slides (16:9)"}
+                    </div>
+                    <div className="text-[10px] text-zinc-400">Rebalance layout automatically</div>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setIsTransformMenuOpen(false);
+                    onTransformAction?.("rewrite");
+                  }}
+                  className="w-full text-left px-3 py-2 hover:bg-white/[0.08] flex items-center gap-2.5"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  <div>
+                    <div className="font-medium text-white">Rewrite Selected Content</div>
+                    <div className="text-[10px] text-zinc-400">Improve clarity & conciseness</div>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setIsTransformMenuOpen(false);
+                    onTransformAction?.("change_tone", "executive");
+                  }}
+                  className="w-full text-left px-3 py-2 hover:bg-white/[0.08] flex items-center gap-2.5"
+                >
+                  <Sliders className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <div>
+                    <div className="font-medium text-white">Executive Tone Polish</div>
+                    <div className="text-[10px] text-zinc-400">Authoritative & formal</div>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setIsTransformMenuOpen(false);
+                    onOpenMarkdownMathModal?.();
+                  }}
+                  className="w-full text-left px-3 py-2 hover:bg-white/[0.08] flex items-center gap-2.5"
+                >
+                  <FileText className="w-3.5 h-3.5 text-violet-400 shrink-0" />
+                  <div>
+                    <div className="font-medium text-white">KaTeX Math & Markdown</div>
+                    <div className="text-[10px] text-zinc-400">Inspect LaTeX equations</div>
+                  </div>
+                </button>
+              </div>
+            )}
+          </div>
+
           {/* Undo / Redo */}
           <div className="flex items-center bg-[#18191e] border border-white/[0.07] rounded-lg p-0.5">
             <button

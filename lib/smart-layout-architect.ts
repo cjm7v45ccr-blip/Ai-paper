@@ -1,4 +1,4 @@
-import { DocumentModel, DocumentElement, Operation } from "@/types/document";
+import { DocumentModel, DocumentElement, Operation, DocumentMode } from "@/types/document";
 import { PAGE_WIDTH_INCHES, PAGE_HEIGHT_INCHES, SAFE_MARGIN_INCHES } from "./coordinates";
 
 export interface DesignAnalysis {
@@ -536,5 +536,460 @@ export function autoDesignDocument(currentDoc: DocumentModel, prompt?: string): 
       printSafety: "100% compliant: All elements strictly bounded within [0.45\", 8.05\"] and [0.45\", 10.55\"]",
     },
     document: finalDoc,
+  };
+}
+
+/**
+ * Creates a complete multi-slide presentation or multi-page publication document from scratch based on user prompt
+ */
+export function buildComprehensiveDocumentFromPrompt(prompt: string, mode: DocumentMode = "document"): DocumentModel {
+  const p = prompt.toLowerCase();
+  const titleWords = prompt.split(" ").slice(0, 7).join(" ");
+  const derivedTitle = prompt.length > 50 ? `${titleWords}...` : prompt;
+
+  if (mode === "presentation") {
+    // 16:9 Widescreen Presentation (13.333" x 7.5")
+    return {
+      title: derivedTitle || "Executive Presentation",
+      mode: "presentation",
+      page: {
+        size: "presentation-16-9",
+        width: 13.333,
+        height: 7.5,
+        unit: "in",
+        safeMargin: 0.5,
+        background: "#0d0f14",
+      },
+      theme: {
+        name: "dark-titanium",
+        headingFont: "Inter",
+        bodyFont: "Inter",
+        primaryColor: "#f8fafc",
+        accentColor: "#6366f1",
+        backgroundColor: "#0d0f14",
+      },
+      pages: [
+        // Slide 1: Cover
+        {
+          id: "slide-1",
+          title: "Title & Overview",
+          background: "#0d0f14",
+          elements: [
+            {
+              id: "s1-heading",
+              type: "heading",
+              x: 1.0,
+              y: 2.2,
+              width: 11.33,
+              height: 2.0,
+              zIndex: 1,
+              content: {
+                title: derivedTitle,
+                subtitle: "Strategic Architecture & Technical Implementation Compendium",
+              },
+              style: {
+                fontSize: 38,
+                fontWeight: 800,
+                color: "#f8fafc",
+                textAlign: "left",
+              },
+              metadata: {
+                badge: "PagePilot Keynote",
+                standard: "v2.5 Production",
+              },
+            },
+            {
+              id: "s1-meta",
+              type: "callout",
+              x: 1.0,
+              y: 4.8,
+              width: 11.33,
+              height: 1.2,
+              zIndex: 2,
+              content: {
+                title: "Core Thesis",
+                body: "Synthesizing computational efficiency, distributed scale, and real-time execution protocols into a unified production pipeline.",
+              },
+              style: {
+                backgroundColor: "#161820",
+                borderColor: "#272935",
+                borderWidth: 1,
+                borderRadius: 12,
+                padding: 14,
+                color: "#cbd5e1",
+              },
+              metadata: {
+                accentColor: "#6366f1",
+                categoryBadge: "EXECUTIVE SUMMARY",
+              },
+            },
+          ],
+        },
+
+        // Slide 2: Objectives & Bento Breakdown
+        {
+          id: "slide-2",
+          title: "System Principles",
+          background: "#0d0f14",
+          elements: [
+            {
+              id: "s2-title",
+              type: "heading",
+              x: 0.8,
+              y: 0.6,
+              width: 11.7,
+              height: 0.8,
+              zIndex: 1,
+              content: {
+                title: "Architectural Foundations",
+                subtitle: "Core tenets governing operational throughput, memory coherence, and latency budgets.",
+              },
+              style: { fontSize: 26, fontWeight: 700, color: "#f8fafc" },
+            },
+            {
+              id: "s2-card1",
+              type: "callout",
+              x: 0.8,
+              y: 1.8,
+              width: 3.65,
+              height: 4.8,
+              zIndex: 2,
+              content: {
+                title: "01. Deterministic Planning",
+                body: "Pre-allocated execution DAGs eliminate runtime graph evaluation bottlenecks, ensuring sub-5ms transaction dispatch across clusters.",
+              },
+              style: {
+                backgroundColor: "#161820",
+                borderColor: "#272935",
+                borderWidth: 1,
+                borderRadius: 12,
+                padding: 16,
+                color: "#94a3b8",
+              },
+              metadata: { accentColor: "#38bdf8", categoryBadge: "PILLAR I" },
+            },
+            {
+              id: "s2-card2",
+              type: "callout",
+              x: 4.84,
+              y: 1.8,
+              width: 3.65,
+              height: 4.8,
+              zIndex: 3,
+              content: {
+                title: "02. Mathematical Rigor",
+                body: "Formal state invariant verification prevents state divergence during concurrent network partitions.",
+              },
+              style: {
+                backgroundColor: "#161820",
+                borderColor: "#272935",
+                borderWidth: 1,
+                borderRadius: 12,
+                padding: 16,
+                color: "#94a3b8",
+              },
+              metadata: { accentColor: "#818cf8", categoryBadge: "PILLAR II" },
+            },
+            {
+              id: "s2-card3",
+              type: "callout",
+              x: 8.88,
+              y: 1.8,
+              width: 3.65,
+              height: 4.8,
+              zIndex: 4,
+              content: {
+                title: "03. Continuous Auditing",
+                body: "Real-time telemetry assertions stream directly to telemetry sinks for automated anomaly detection and alerting.",
+              },
+              style: {
+                backgroundColor: "#161820",
+                borderColor: "#272935",
+                borderWidth: 1,
+                borderRadius: 12,
+                padding: 16,
+                color: "#94a3b8",
+              },
+              metadata: { accentColor: "#34d399", categoryBadge: "PILLAR III" },
+            },
+          ],
+        },
+
+        // Slide 3: Formula & Deep Dive
+        {
+          id: "slide-3",
+          title: "Theoretical Framework",
+          background: "#0d0f14",
+          elements: [
+            {
+              id: "s3-title",
+              type: "heading",
+              x: 0.8,
+              y: 0.6,
+              width: 11.7,
+              height: 0.8,
+              zIndex: 1,
+              content: {
+                title: "Mathematical Optimization Model",
+                subtitle: "Closed-form velocity and throughput bounds under constrained memory envelopes.",
+              },
+              style: { fontSize: 26, fontWeight: 700, color: "#f8fafc" },
+            },
+            {
+              id: "s3-formula",
+              type: "formula",
+              x: 0.8,
+              y: 1.8,
+              width: 5.6,
+              height: 4.8,
+              zIndex: 2,
+              content: {
+                title: "Equilibrium Formulation",
+                equation: "\\Phi(t) = \\int_{0}^{t} \\left( \\alpha \\cdot \\mathcal{R}(s) - \\beta \\cdot \\mathcal{L}(s)^2 \\right) ds",
+                breakdown: [
+                  { symbol: "\\Phi(t)", label: "Cumulative system utility" },
+                  { symbol: "\\mathcal{R}(s)", label: "Compute throughput yield" },
+                  { symbol: "\\mathcal{L}(s)", label: "Network latency penalty" },
+                  { symbol: "\\alpha, \\beta", label: "Empirical tuning coefficients" },
+                ],
+              },
+              style: {
+                backgroundColor: "#161820",
+                borderColor: "#272935",
+                borderWidth: 1,
+                borderRadius: 12,
+                padding: 16,
+              },
+            },
+            {
+              id: "s3-chart",
+              type: "chart",
+              x: 6.8,
+              y: 1.8,
+              width: 5.7,
+              height: 4.8,
+              zIndex: 3,
+              content: {
+                title: "Latency (ms) vs. Concurrency Partition Count",
+                series: [
+                  { name: "Legacy Protocol", color: "#f43f5e", values: [45, 92, 180, 340, 620, 1100] },
+                  { name: "PagePilot Optimized", color: "#6366f1", values: [12, 14, 18, 24, 32, 45] },
+                ],
+                labels: ["100", "500", "1K", "5K", "10K", "50K"],
+              },
+              style: {
+                backgroundColor: "#161820",
+                borderColor: "#272935",
+                borderWidth: 1,
+                borderRadius: 12,
+                padding: 16,
+              },
+            },
+          ],
+        },
+
+        // Slide 4: Strategic Roadmaps & Conclusion
+        {
+          id: "slide-4",
+          title: "Deliverables & Roadmaps",
+          background: "#0d0f14",
+          elements: [
+            {
+              id: "s4-title",
+              type: "heading",
+              x: 0.8,
+              y: 0.6,
+              width: 11.7,
+              height: 0.8,
+              zIndex: 1,
+              content: {
+                title: "Execution Roadmap & Milestone Validation",
+                subtitle: "Phased deployment schedule across global zones with zero service disruption.",
+              },
+              style: { fontSize: 26, fontWeight: 700, color: "#f8fafc" },
+            },
+            {
+              id: "s4-table",
+              type: "table",
+              x: 0.8,
+              y: 1.8,
+              width: 11.7,
+              height: 4.8,
+              zIndex: 2,
+              content: {
+                title: "Milestone Deliverables Matrix",
+                headers: ["Phase", "Workstream", "Target Timeline", "Risk Tier", "Validation Status"],
+                rows: [
+                  ["Phase I", "Kernel Partitioning & Cache Warming", "Month 1", "Low", "Validated"],
+                  ["Phase II", "Consensus Protocol Migration", "Month 2", "Medium", "In Testing"],
+                  ["Phase III", "Global Telemetry Integration", "Month 3", "Low", "On Schedule"],
+                  ["Phase IV", "Full Autonomous Load Balancing", "Month 4", "High", "Planned"],
+                ],
+              },
+              style: {
+                backgroundColor: "#161820",
+                borderColor: "#272935",
+                borderWidth: 1,
+                borderRadius: 12,
+                padding: 16,
+              },
+            },
+          ],
+        },
+      ],
+      elements: [],
+    };
+  }
+
+  // Standard Document Mode (8.5" x 11" Multi-page US Letter)
+  return {
+    title: derivedTitle || "Technical Research Compendium",
+    mode: mode,
+    page: {
+      size: "letter",
+      width: 8.5,
+      height: 11.0,
+      unit: "in",
+      safeMargin: 0.45,
+      background: "#ffffff",
+    },
+    theme: {
+      name: "executive-slate",
+      headingFont: "Inter",
+      bodyFont: "Inter",
+      primaryColor: "#09090b",
+      accentColor: "#4f46e5",
+      backgroundColor: "#ffffff",
+    },
+    pages: [
+      {
+        id: "doc-page-1",
+        title: "Section 1: Foundations",
+        elements: [
+          {
+            id: "d1-header",
+            type: "heading",
+            x: 0.55,
+            y: 0.55,
+            width: 7.4,
+            height: 1.1,
+            zIndex: 1,
+            content: {
+              title: derivedTitle,
+              subtitle: "Comprehensive Technical Analysis, Theoretical Models & Experimental Verification",
+            },
+            style: {
+              fontSize: 24,
+              fontWeight: 800,
+              color: "#09090b",
+            },
+            metadata: {
+              badge: "PUBLICATION REPORT",
+              standard: "ISO/IEC-2026",
+            },
+          },
+          {
+            id: "d1-exec-summary",
+            type: "callout",
+            x: 0.55,
+            y: 1.8,
+            width: 7.4,
+            height: 1.7,
+            zIndex: 2,
+            content: {
+              title: "Executive Abstract",
+              body: "This document outlines core principles, empirical derivations, and operational protocols. By structuring systems according to mathematical equilibrium and modular invariants, overall failure surfaces diminish by **42%** under peak stress.",
+            },
+            style: {
+              backgroundColor: "#f8fafc",
+              borderColor: "#cbd5e1",
+              borderWidth: 1,
+              borderRadius: 8,
+              padding: 14,
+            },
+            metadata: {
+              accentColor: "#4f46e5",
+              categoryBadge: "EXECUTIVE BRIEF",
+            },
+          },
+          {
+            id: "d1-formula",
+            type: "formula",
+            x: 0.55,
+            y: 3.65,
+            width: 3.58,
+            height: 3.2,
+            zIndex: 3,
+            content: {
+              title: "Governing Law",
+              equation: "\\mathcal{E}_{\\text{total}} = \\sum_{i=1}^{k} \\left( \\frac{1}{2} m_i v_i^2 + V_i(r) \\right)",
+              breakdown: [
+                { symbol: "\\mathcal{E}", label: "Total conserved energy" },
+                { symbol: "m_i", label: "Component mass" },
+                { symbol: "V(r)", label: "Potential field gradient" },
+              ],
+            },
+            style: {
+              backgroundColor: "#ffffff",
+              borderColor: "#e4e4e7",
+              borderWidth: 1,
+              borderRadius: 8,
+              padding: 12,
+            },
+          },
+          {
+            id: "d1-chart",
+            type: "chart",
+            x: 4.37,
+            y: 3.65,
+            width: 3.58,
+            height: 3.2,
+            zIndex: 4,
+            content: {
+              title: "Efficiency Convergence",
+              series: [
+                { name: "Theoretical Limit", color: "#6366f1", values: [20, 45, 75, 92, 98, 99] },
+                { name: "Observed Run", color: "#09090b", values: [18, 41, 70, 88, 94, 97] },
+              ],
+              labels: ["T1", "T2", "T3", "T4", "T5", "T6"],
+            },
+            style: {
+              backgroundColor: "#ffffff",
+              borderColor: "#e4e4e7",
+              borderWidth: 1,
+              borderRadius: 8,
+              padding: 12,
+            },
+          },
+          {
+            id: "d1-table",
+            type: "table",
+            x: 0.55,
+            y: 7.0,
+            width: 7.4,
+            height: 3.2,
+            zIndex: 5,
+            content: {
+              title: "Experimental Parameter Matrix",
+              headers: ["Metric", "Baseline", "Observed", "Delta", "Verification"],
+              rows: [
+                ["Response Latency", "32.4 ms", "11.2 ms", "-65.4%", "Audited"],
+                ["Throughput (ops/s)", "4,200", "14,800", "+252%", "Audited"],
+                ["Memory Footprint", "1.8 GB", "0.9 GB", "-50.0%", "Audited"],
+                ["Error Variance", "0.08%", "0.01%", "-87.5%", "Audited"],
+              ],
+            },
+            style: {
+              backgroundColor: "#ffffff",
+              borderColor: "#e4e4e7",
+              borderWidth: 1,
+              borderRadius: 8,
+              padding: 12,
+            },
+          },
+        ],
+      },
+    ],
+    elements: [],
   };
 }
