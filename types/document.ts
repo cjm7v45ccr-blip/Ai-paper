@@ -107,8 +107,18 @@ export interface QualityCheckIssue {
   elementIds?: string[];
 }
 
+export interface DesignReasoning {
+  documentType: string;
+  gridSystem: string;
+  typographyPairing: string;
+  colorPalette: string;
+  semanticComponents: string[];
+  printSafety: string;
+}
+
 export interface AIResponsePayload {
   message: string;
   operations: Operation[];
   qualityChecks: QualityCheckIssue[];
+  designReasoning?: DesignReasoning;
 }

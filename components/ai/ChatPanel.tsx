@@ -13,8 +13,13 @@ import {
   ArrowUp,
   Bot,
   User,
+  Layout,
+  Layers,
+  Palette,
+  Type,
+  Check,
 } from "lucide-react";
-import { QualityCheckIssue } from "@/types/document";
+import { QualityCheckIssue, DesignReasoning } from "@/types/document";
 
 interface ChatMessage {
   sender: "user" | "ai";
@@ -26,10 +31,12 @@ interface ChatPanelProps {
   onClose: () => void;
   messages: ChatMessage[];
   qualityIssues: QualityCheckIssue[];
+  designReasoning?: DesignReasoning;
   isAiLoading?: boolean;
   onAutoFixMargins?: () => void;
   onAutoFixOverlaps?: () => void;
   onSendMessage?: (prompt: string) => void;
+  onTransformDocument?: (archetype: string) => void;
 }
 
 export const ChatPanel: React.FC<ChatPanelProps> = ({
@@ -37,12 +44,14 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   onClose,
   messages,
   qualityIssues,
+  designReasoning,
   isAiLoading = false,
   onAutoFixMargins,
   onAutoFixOverlaps,
   onSendMessage,
+  onTransformDocument,
 }) => {
-  const [activeTab, setActiveTab] = useState<"chat" | "check">("chat");
+  const [activeTab, setActiveTab] = useState<"chat" | "design" | "check">("chat");
   const [inputValue, setInputValue] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -114,6 +123,21 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
               <span className="px-1.5 bg-indigo-100 text-indigo-700 text-[10px] font-bold rounded-full">
                 {messages.length}
               </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => setActiveTab("design")}
+            className={`px-3 py-1 rounded-md transition-all flex items-center gap-1.5 ${
+              activeTab === "design"
+                ? "bg-white text-indigo-700 shadow-sm font-semibold"
+                : "text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            <Sparkles className="w-3 h-3 text-indigo-500" />
+            <span>AI Design Logic</span>
+            {designReasoning && (
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
             )}
           </button>
 
@@ -220,6 +244,145 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                 Enter to send · Shift+Enter for new line
               </p>
             </div>
+          </div>
+        ) : activeTab === "design" ? (
+          /* AI Design Logic & Architectural Reasoning Tab */
+          <div className="p-4 space-y-4">
+            {/* Archetype Quick Action Banner */}
+            <div className="p-3.5 bg-gradient-to-br from-indigo-50/90 via-violet-50/50 to-white border border-indigo-100 rounded-xl shadow-2xs">
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-950">
+                  <Sparkles className="w-4 h-4 text-indigo-600" />
+                  <span>AI Design Architect Engine</span>
+                </div>
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
+                  Active
+                </span>
+              </div>
+              <p className="text-xs text-slate-600 leading-relaxed mb-3">
+                PagePilot reasons holistically through document semantics, KaTeX math formulas, optical balance, and print boundaries.
+              </p>
+
+              {/* Archetype One-Click Buttons */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <button
+                  onClick={() => onTransformDocument?.("chemistry")}
+                  className="px-2.5 py-2 rounded-lg bg-white border border-emerald-200 hover:border-emerald-400 hover:bg-emerald-50/50 text-left transition-all shadow-2xs group"
+                >
+                  <div className="text-xs font-bold text-emerald-800 flex items-center gap-1">
+                    <span>🧪</span> Chem Lab Guide
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-0.5">Bento + LaTeX $D=m/V$</div>
+                </button>
+                <button
+                  onClick={() => onTransformDocument?.("academic")}
+                  className="px-2.5 py-2 rounded-lg bg-white border border-indigo-200 hover:border-indigo-400 hover:bg-indigo-50/50 text-left transition-all shadow-2xs group"
+                >
+                  <div className="text-xs font-bold text-indigo-800 flex items-center gap-1">
+                    <span>🏛️</span> Academic Paper
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-0.5">Dual-column balance</div>
+                </button>
+                <button
+                  onClick={() => onTransformDocument?.("executive")}
+                  className="px-2.5 py-2 rounded-lg bg-white border border-slate-200 hover:border-slate-400 hover:bg-slate-50 text-left transition-all shadow-2xs group"
+                >
+                  <div className="text-xs font-bold text-slate-800 flex items-center gap-1">
+                    <span>💼</span> Executive Brief
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-0.5">Structured summaries</div>
+                </button>
+              </div>
+            </div>
+
+            {/* Design Reasoning Breakdown */}
+            {designReasoning ? (
+              <div className="space-y-3">
+                {/* 1. Document Identity Card */}
+                <div className="border border-slate-200 rounded-xl p-3.5 bg-white shadow-2xs">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                    Document Archetype
+                  </div>
+                  <div className="text-sm font-bold text-slate-800">
+                    {designReasoning.documentType}
+                  </div>
+                </div>
+
+                {/* 2. Grid & Geometry Card */}
+                <div className="border border-slate-200 rounded-xl p-3.5 bg-white shadow-2xs space-y-2">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
+                    <Layout className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>Grid & Optical Geometry</span>
+                  </div>
+                  <p className="text-xs text-slate-600 leading-relaxed font-mono text-[11px] bg-slate-50 p-2 rounded border border-slate-100">
+                    {designReasoning.gridSystem}
+                  </p>
+                </div>
+
+                {/* 3. Typography & Modular Scale Card */}
+                <div className="border border-slate-200 rounded-xl p-3.5 bg-white shadow-2xs space-y-2">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
+                    <Type className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>Typography Pairing & Scale</span>
+                  </div>
+                  <p className="text-xs text-slate-600 leading-relaxed font-mono text-[11px] bg-slate-50 p-2 rounded border border-slate-100">
+                    {designReasoning.typographyPairing}
+                  </p>
+                </div>
+
+                {/* 4. Color Palette & Harmony Card */}
+                <div className="border border-slate-200 rounded-xl p-3.5 bg-white shadow-2xs space-y-2">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
+                    <Palette className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>Color Palette & Contrast</span>
+                  </div>
+                  <p className="text-xs text-slate-600 leading-relaxed font-mono text-[11px] bg-slate-50 p-2 rounded border border-slate-100">
+                    {designReasoning.colorPalette}
+                  </p>
+                </div>
+
+                {/* 5. Semantic Decisions List */}
+                <div className="border border-emerald-200 rounded-xl p-3.5 bg-emerald-50/40 shadow-2xs space-y-2">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-900">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    <span>Semantic Synthesized Decisions ({designReasoning.semanticComponents.length})</span>
+                  </div>
+                  <ul className="space-y-1.5">
+                    {designReasoning.semanticComponents.map((item, idx) => (
+                      <li key={idx} className="flex items-start gap-2 text-xs text-emerald-950 bg-white/90 p-2 rounded-lg border border-emerald-100">
+                        <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                {/* 6. Print Margin Safety */}
+                <div className="border border-sky-200 rounded-xl p-3 bg-sky-50/60 flex items-center justify-between text-xs text-sky-950">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-sky-600" />
+                    <span className="font-semibold">{designReasoning.printSafety}</span>
+                  </div>
+                  <span className="text-[10px] font-bold text-sky-700 bg-sky-100 px-2 py-0.5 rounded-full">
+                    VERIFIED
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="p-6 text-center border border-dashed border-slate-200 rounded-xl bg-slate-50">
+                <Sparkles className="w-8 h-8 text-indigo-400 mx-auto mb-2" />
+                <h5 className="text-xs font-bold text-slate-800">No Design Reasoning Generated Yet</h5>
+                <p className="text-[11px] text-slate-500 mt-1 max-w-sm mx-auto">
+                  Click below to let PagePilot's AI Layout Architect analyze this document's text and math, balance the grid, and provide complete design reasoning.
+                </p>
+                <button
+                  onClick={() => onTransformDocument?.("auto")}
+                  className="mt-3.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all"
+                >
+                  Auto-Design Layout Now
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           /* Page Check Tab */

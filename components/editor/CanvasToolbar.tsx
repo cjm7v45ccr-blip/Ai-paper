@@ -59,6 +59,7 @@ interface CanvasToolbarProps {
   onInsertElement?: (type: string) => void;
   activeFontFamily?: string;
   onFontFamilyChange?: (font: string) => void;
+  onAutoDesign?: (mode: string) => void;
 }
 
 export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
@@ -86,6 +87,7 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
   onInsertElement,
   activeFontFamily = "Inter, sans-serif",
   onFontFamilyChange,
+  onAutoDesign,
 }) => {
   const [showEquationToolbar, setShowEquationToolbar] = useState(false);
   const [activePaletteGroup, setActivePaletteGroup] = useState<string | null>(null);
@@ -589,6 +591,104 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
           <Palette className="w-3 h-3" />
           <span className="hidden xl:inline">B&W</span>
         </button>
+
+        {/* AI Architect Quick Design Dropdown */}
+        <div className="relative">
+          <button
+            onClick={() => setActiveMenu(activeMenu === "aiArchitect" ? null : "aiArchitect")}
+            className="h-7 px-2.5 rounded bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white flex items-center gap-1.5 font-bold text-xs shadow-2xs transition-all"
+            title="AI Layout Architect — Complete Document Redesign"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+            <span>AI Design</span>
+            <ChevronDown className="w-3 h-3 text-indigo-200" />
+          </button>
+          {activeMenu === "aiArchitect" && (
+            <div className="absolute right-0 top-full mt-1 w-64 bg-white border border-slate-200 rounded-xl shadow-2xl py-1.5 z-50 text-xs text-slate-700">
+              <div className="px-3 py-1.5 border-b border-slate-100">
+                <span className="text-[10px] font-bold tracking-wider uppercase text-indigo-600">
+                  Smart Layout Architect
+                </span>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Semantic restructuring, balanced columns & KaTeX formulas.
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  onAutoDesign?.("auto");
+                  setActiveMenu(null);
+                }}
+                className="w-full text-left px-3 py-2 hover:bg-indigo-50 hover:text-indigo-700 flex items-center gap-2 font-medium"
+              >
+                <Sparkles className="w-4 h-4 text-indigo-600 shrink-0" />
+                <div>
+                  <div className="font-semibold text-slate-800">Auto-Design Document</div>
+                  <div className="text-[10px] text-slate-500">Restructure content & equalize grid</div>
+                </div>
+              </button>
+              <button
+                onClick={() => {
+                  onAutoDesign?.("chemistry");
+                  setActiveMenu(null);
+                }}
+                className="w-full text-left px-3 py-2 hover:bg-emerald-50 hover:text-emerald-800 flex items-center gap-2 font-medium"
+              >
+                <span className="text-base">🧪</span>
+                <div>
+                  <div className="font-semibold text-slate-800">Chemistry / STEM Lab Guide</div>
+                  <div className="text-[10px] text-slate-500">Bento grid + KaTeX $D=m/V$ + mnemonic</div>
+                </div>
+              </button>
+              <button
+                onClick={() => {
+                  onAutoDesign?.("academic");
+                  setActiveMenu(null);
+                }}
+                className="w-full text-left px-3 py-2 hover:bg-blue-50 hover:text-blue-800 flex items-center gap-2 font-medium"
+              >
+                <span className="text-base">🏛️</span>
+                <div>
+                  <div className="font-semibold text-slate-800">Academic Study Guide</div>
+                  <div className="text-[10px] text-slate-500">Formal sections, key takeaways, equations</div>
+                </div>
+              </button>
+              <button
+                onClick={() => {
+                  onAutoDesign?.("executive");
+                  setActiveMenu(null);
+                }}
+                className="w-full text-left px-3 py-2 hover:bg-slate-100 flex items-center gap-2 font-medium"
+              >
+                <span className="text-base">💼</span>
+                <div>
+                  <div className="font-semibold text-slate-800">Executive Whitepaper</div>
+                  <div className="text-[10px] text-slate-500">Summary card, two-column insights, metrics</div>
+                </div>
+              </button>
+              <div className="h-[1px] bg-slate-100 my-1" />
+              <button
+                onClick={() => {
+                  onAutoDesign?.("balance");
+                  setActiveMenu(null);
+                }}
+                className="w-full text-left px-3 py-1.5 hover:bg-slate-100 flex items-center justify-between text-slate-600"
+              >
+                <span>Auto-Balance Column Heights</span>
+                <span className="text-[10px] text-slate-400">0.24" Gutter</span>
+              </button>
+              <button
+                onClick={() => {
+                  onAutoDesign?.("margins");
+                  setActiveMenu(null);
+                }}
+                className="w-full text-left px-3 py-1.5 hover:bg-slate-100 flex items-center justify-between text-slate-600"
+              >
+                <span>Clamp to 0.45" Safe Margins</span>
+                <span className="text-[10px] text-emerald-600 font-bold">Safe Bleed</span>
+              </button>
+            </div>
+          )}
+        </div>
 
         {/* Preview Mode */}
         <button

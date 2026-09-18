@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { DocumentModel, DocumentElement, QualityCheckIssue } from "@/types/document";
+import { DocumentModel, DocumentElement, QualityCheckIssue, DesignReasoning } from "@/types/document";
 import { INITIAL_SAMPLE_DOCUMENT } from "@/lib/sample-document";
 import { applyOperations } from "@/lib/apply-operations";
 import {
@@ -17,6 +17,7 @@ import {
   PAGE_WIDTH_INCHES,
   PAGE_HEIGHT_INCHES,
 } from "@/lib/coordinates";
+import { buildChemistryMeasurementGuide, autoDesignDocument } from "@/lib/smart-layout-architect";
 
 import { CanvasToolbar } from "@/components/editor/CanvasToolbar";
 import { LeftSidebar } from "@/components/editor/LeftSidebar";
@@ -42,6 +43,7 @@ export default function PagePilotEditor() {
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [isPrintPreviewOpen, setIsPrintPreviewOpen] = useState(false);
   const [isMarkdownMathOpen, setIsMarkdownMathOpen] = useState(false);
+  const [designReasoning, setDesignReasoning] = useState<DesignReasoning | undefined>();
 
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
@@ -344,6 +346,10 @@ export default function PagePilotEditor() {
         setTimeout(() => setIsAnimating(false), 2200);
       }
 
+      if (data.designReasoning) {
+        setDesignReasoning(data.designReasoning);
+      }
+
       setChatMessages((prev) => [
         ...prev,
         { sender: "ai", text: data.message || "Document successfully updated." },
@@ -370,10 +376,50 @@ export default function PagePilotEditor() {
     handleSendMessage(`Modify element "${id}": ${instruction}`);
   };
 
+  // AI Architect Direct Layout Redesign
+  const handleAutoDesign = (mode: string) => {
+    if (mode === "chemistry") {
+      const result = buildChemistryMeasurementGuide();
+      pushToHistory(result.document);
+      setDesignReasoning(result.reasoning);
+      setDocumentTitle(result.document.title || "Chemistry Reference Guide");
+      setSelectedElementId(null);
+      setChatMessages((prev) => [
+        ...prev,
+        { sender: "user", text: "Transform to Chemistry Lab Guide" },
+        { sender: "ai", text: result.message },
+      ]);
+      setIsAnimating(true);
+      setTimeout(() => setIsAnimating(false), 2000);
+    } else if (mode === "margins") {
+      handleAutoFixMargins();
+    } else if (mode === "balance") {
+      handleSendMessage("Auto-balance two-column layout and equalize section card heights");
+    } else {
+      // Direct client-side smart architect execution for instant responsiveness
+      const result = autoDesignDocument(documentState);
+      pushToHistory(result.document);
+      setDesignReasoning(result.reasoning);
+      setSelectedElementId(null);
+      setChatMessages((prev) => [
+        ...prev,
+        { sender: "user", text: "Auto-Design Document Layout" },
+        { sender: "ai", text: result.message },
+      ]);
+      setIsAnimating(true);
+      setTimeout(() => setIsAnimating(false), 2000);
+    }
+  };
+
   // Preset Templates
   const handleApplyPreset = (
-    preset: "compound-interest" | "photosynthesis" | "quiz" | "physics" | "executive"
+    preset: "compound-interest" | "photosynthesis" | "quiz" | "physics" | "executive" | "chemistry"
   ) => {
+    if (preset === "chemistry") {
+      handleAutoDesign("chemistry");
+      return;
+    }
+
     if (preset === "compound-interest") {
       pushToHistory(INITIAL_SAMPLE_DOCUMENT);
       setDocumentTitle("Compound Interest Study Guide");
@@ -759,13 +805,17 @@ export default function PagePilotEditor() {
         onOpenMarkdownMathModal={() => setIsMarkdownMathOpen(true)}
         onInsertEquation={handleInsertEquation}
         onInsertElement={handleInsertElement}
+        onAutoDesign={handleAutoDesign}
       />
 
       {/* Main Workspace with Left Sidebar, Document Canvas, and Right Inspector */}
       <div className="flex flex-1 overflow-hidden relative">
-        {/* Left Component Library */}
+        {/* Left Component Library & Document Outline */}
         {!isPreviewMode && (
           <LeftSidebar
+            document={documentState}
+            selectedElementId={selectedElementId}
+            onSelectElement={setSelectedElementId}
             onAddElement={(el) =>
               pushToHistory({
                 ...documentState,
@@ -793,6 +843,7 @@ export default function PagePilotEditor() {
             onDuplicateElement={handleDuplicateElement}
             isBlackAndWhite={isBlackAndWhite}
             showMargins={showMargins}
+            onToggleMargins={() => setShowMargins(!showMargins)}
             isPreviewMode={isPreviewMode}
             isAnimating={isAnimating}
           />
@@ -856,10 +907,12 @@ export default function PagePilotEditor() {
         onClose={() => setIsChatPanelOpen(false)}
         messages={chatMessages}
         qualityIssues={qualityIssues}
+        designReasoning={designReasoning}
         isAiLoading={isAiLoading}
         onAutoFixMargins={handleAutoFixMargins}
         onAutoFixOverlaps={handleAutoFixOverlaps}
         onSendMessage={handleSendMessage}
+        onTransformDocument={handleAutoDesign}
       />
 
       {/* High-Fidelity Print & PDF Preview Modal */}

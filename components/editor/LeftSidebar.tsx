@@ -21,20 +21,28 @@ import {
   FileCode,
   Sigma,
   ChevronDown,
+  ListOrdered,
+  ShieldCheck,
 } from "lucide-react";
-import { DocumentElement } from "@/types/document";
+import { DocumentElement, DocumentModel } from "@/types/document";
 import { SAFE_MARGIN_INCHES, PAGE_WIDTH_INCHES, PAGE_HEIGHT_INCHES } from "@/lib/coordinates";
 
 interface LeftSidebarProps {
+  document?: DocumentModel;
+  selectedElementId?: string | null;
+  onSelectElement?: (id: string | null) => void;
   onAddElement: (element: DocumentElement) => void;
-  onApplyTemplate: (preset: "compound-interest" | "photosynthesis" | "quiz" | "physics" | "executive") => void;
+  onApplyTemplate: (preset: "compound-interest" | "photosynthesis" | "quiz" | "physics" | "executive" | "chemistry") => void;
 }
 
 export const LeftSidebar: React.FC<LeftSidebarProps> = ({
+  document: doc,
+  selectedElementId,
+  onSelectElement,
   onAddElement,
   onApplyTemplate,
 }) => {
-  const [activeTab, setActiveTab] = useState<"components" | "templates">("components");
+  const [activeTab, setActiveTab] = useState<"outline" | "components" | "templates">("outline");
 
   const createSmartElement = (type: DocumentElement["type"]) => {
     // Standard safe defaults
@@ -204,31 +212,113 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   return (
     <aside className="no-print w-64 bg-white border-r border-slate-200 flex flex-col h-[calc(100vh-3.5rem)] z-20 shrink-0 select-none">
       {/* Tab Switcher */}
-      <div className="flex border-b border-slate-200 p-2 gap-1 bg-slate-50">
+      <div className="flex border-b border-slate-200 p-1.5 gap-1 bg-slate-50">
+        <button
+          onClick={() => setActiveTab("outline")}
+          className={`flex-1 text-xs py-1.5 font-medium rounded-md transition-all flex items-center justify-center gap-1 ${
+            activeTab === "outline"
+              ? "bg-white text-indigo-700 shadow-2xs border border-slate-200 font-semibold"
+              : "text-slate-600 hover:text-slate-900"
+          }`}
+          title="Document Outline & Structure"
+        >
+          <ListOrdered className="w-3 h-3" />
+          <span>Outline</span>
+        </button>
         <button
           onClick={() => setActiveTab("components")}
           className={`flex-1 text-xs py-1.5 font-medium rounded-md transition-all ${
             activeTab === "components"
-              ? "bg-white text-indigo-700 shadow-xs border border-slate-200 font-semibold"
+              ? "bg-white text-indigo-700 shadow-2xs border border-slate-200 font-semibold"
               : "text-slate-600 hover:text-slate-900"
           }`}
         >
-          Components
+          Insert
         </button>
         <button
           onClick={() => setActiveTab("templates")}
           className={`flex-1 text-xs py-1.5 font-medium rounded-md transition-all ${
             activeTab === "templates"
-              ? "bg-white text-indigo-700 shadow-xs border border-slate-200 font-semibold"
+              ? "bg-white text-indigo-700 shadow-2xs border border-slate-200 font-semibold"
               : "text-slate-600 hover:text-slate-900"
           }`}
         >
-          Templates
+          Archetypes
         </button>
       </div>
 
       <div className="flex-1 overflow-y-auto p-3 space-y-4">
-        {activeTab === "components" ? (
+        {activeTab === "outline" ? (
+          /* Google Docs Authentic Outline Tab */
+          <div className="space-y-3">
+            {/* Document Metrics Strip */}
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-600 space-y-1.5">
+              <div className="flex items-center justify-between font-bold text-slate-800">
+                <span>Document Structure</span>
+                <span className="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-mono">
+                  {doc?.elements?.length || 0} Elements
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-1 text-[11px] text-slate-500 pt-1 border-t border-slate-200/60">
+                <div>Page: <span className="font-semibold text-slate-700">8.5" × 11"</span></div>
+                <div>Bleed: <span className="font-semibold text-emerald-700">0.45" safe</span></div>
+              </div>
+            </div>
+
+            {/* Element Outline Items */}
+            <div className="space-y-1">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1">
+                Reading Order Sections
+              </span>
+              {(!doc?.elements || doc.elements.length === 0) ? (
+                <div className="text-xs text-slate-400 italic p-3 text-center">
+                  Document canvas is empty
+                </div>
+              ) : (
+                [...doc.elements]
+                  .sort((a, b) => {
+                    if (Math.abs(a.y - b.y) > 0.4) return a.y - b.y;
+                    return a.x - b.x;
+                  })
+                  .map((el, idx) => {
+                    const isSelected = selectedElementId === el.id;
+                    let displayTitle: string = el.type;
+                    if (el.content?.title) {
+                      displayTitle = el.content.title;
+                    } else if (el.content?.equation) {
+                      displayTitle = `Eq: ${el.content.equation}`;
+                    } else if (typeof el.content === "string") {
+                      displayTitle = el.content.slice(0, 32);
+                    }
+
+                    return (
+                      <button
+                        key={el.id}
+                        onClick={() => onSelectElement?.(el.id)}
+                        className={`w-full text-left p-2 rounded-lg text-xs transition-all flex items-start gap-2 border ${
+                          isSelected
+                            ? "bg-indigo-50/80 border-indigo-300 text-indigo-950 font-semibold shadow-2xs"
+                            : "hover:bg-slate-50 border-transparent hover:border-slate-200 text-slate-700"
+                        }`}
+                      >
+                        <span className="text-[10px] font-mono font-bold text-slate-400 mt-0.5 shrink-0">
+                          {String(idx + 1).padStart(2, "0")}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate leading-tight">{displayTitle}</div>
+                          <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1.5 mt-0.5">
+                            <span className="capitalize">{el.type}</span>
+                            <span>•</span>
+                            <span>{el.x.toFixed(1)}", {el.y.toFixed(1)}"</span>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })
+              )}
+            </div>
+          </div>
+        ) : activeTab === "components" ? (
           <>
             {/* Typography */}
             <div>
@@ -374,6 +464,23 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
         ) : (
           /* Templates Section */
           <div className="space-y-2.5">
+            <button
+              onClick={() => onApplyTemplate("chemistry")}
+              className="w-full p-3 border-2 border-emerald-500/80 bg-emerald-50/40 rounded-xl text-left hover:border-emerald-600 hover:bg-emerald-50 transition-all shadow-2xs group"
+            >
+              <div className="flex items-center justify-between mb-1">
+                <div className="text-xs font-bold text-emerald-900 flex items-center gap-1.5">
+                  <span className="text-sm">🧪</span> Chemistry Measurement Guide
+                </div>
+                <span className="text-[9px] font-bold uppercase bg-emerald-600 text-white px-1.5 py-0.5 rounded">
+                  AI Standard
+                </span>
+              </div>
+              <div className="text-[11px] text-emerald-800/90 leading-snug">
+                Dual-column bento grid, elevated D = m/V KaTeX card, conversion mnemonic, and units matrix.
+              </div>
+            </button>
+
             <button
               onClick={() => onApplyTemplate("compound-interest")}
               className="w-full p-3 border border-slate-200 rounded-lg text-left hover:border-indigo-500 hover:bg-indigo-50/30 transition-all"

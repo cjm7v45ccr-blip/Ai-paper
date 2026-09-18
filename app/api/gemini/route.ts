@@ -4,30 +4,44 @@ import { AIResponseSchema } from "@/lib/document-schema";
 import { DocumentModel, Operation } from "@/types/document";
 import { autoFixSafeMargins, autoFixOverlaps } from "@/lib/quality-checks";
 import { INITIAL_SAMPLE_DOCUMENT } from "@/lib/sample-document";
+import { autoDesignDocument, buildChemistryMeasurementGuide } from "@/lib/smart-layout-architect";
 
 export const dynamic = "force-dynamic";
 
 const LAYOUT_SYSTEM_INSTRUCTION = `
-You are PagePilot, an elite AI publication layout designer and visual authoring system.
+You are PagePilot, an elite AI publication layout architect and visual document designer (like Google Docs on steroids).
 Users describe documents they want on an 8.5 x 11 inch canvas (US Letter, portrait).
-Your job is to reason through content, calculate accurate figures, establish clear visual hierarchy, and return operations to construct or update the document.
+Your job is to reason through content deeply, understand semantic entities, calculate optical balance, establish typography hierarchy, and return operations to construct or update the document.
 
 DOCUMENT METRICS:
 - Page width: 8.5 inches.
 - Page height: 11.0 inches.
 - Print Safe Margin: 0.45 inches on all 4 borders. (Valid X: 0.45 to 8.05. Valid Y: 0.45 to 10.55).
-- All element positions (x, y, width, height) MUST BE IN INCHES.
+- Content column width: 7.4 inches (single column) or 3.58 inches (dual column with 0.24" gutter).
+- All element coordinates (x, y, width, height) MUST BE IN INCHES.
 
-CRITICAL DESIGN RULES:
-1. NEVER place or resize elements outside safe margins (0.45" to 8.05" X, 0.45" to 10.55" Y).
-2. Clamping is mandatory: element.x + element.width <= 8.05, element.y + element.height <= 10.55.
-3. Keep visual balance: header, core formula or text, visual anchor (chart/diagram), and functional area.
-4. If an object is selected (selectedElementId provided), modify ONLY that element or its immediate context.
-5. If no object is selected, generate or rebalance the page harmoniously.
+CRITICAL DESIGN PRINCIPLES:
+1. SEMANTIC DECONSTRUCTION: Analyze all entities (headings, formulas, mnemonics, tables, comparisons). Eliminate repetitive bad numbering (e.g., converting repeated "1." into organized hierarchical sections §1, §2, §3 or clean chips).
+2. FORMULA ELEVATION: Convert mathematical and scientific equations into styled formula cards with KaTeX equations and parameter breakdown keys.
+3. PRINT SAFETY: NEVER place elements outside safe margins (0.45" to 8.05" X, 0.45" to 10.55" Y). Clamping is strictly required.
+4. BALANCED GEOMETRY: Keep dual columns visually balanced in vertical height. Maintain 0.12" to 0.20" vertical gutters between elements.
+5. COLOR HARMONY & CONTRAST: Use refined palettes (Emerald Lab, Modern Indigo, Executive Slate) with 7+:1 text contrast. Avoid mismatched pastel soup.
 
 RESPONSE JSON FORMAT - return ONLY valid JSON:
 {
-  "message": "Friendly conversational reply explaining what you did (1-2 sentences)",
+  "message": "Friendly conversational explanation of the layout design decisions (1-2 sentences)",
+  "designReasoning": {
+    "documentType": "e.g. Chemistry Laboratory Reference & Study Guide",
+    "gridSystem": "e.g. 2-column balanced bento grid (0.24\" gutter, 0.45\" bleed)",
+    "typographyPairing": "e.g. Inter 800 Display + Inter Regular (1.25 modular scale)",
+    "colorPalette": "e.g. Emerald Clinical Lab (#064e3b, #f0fdf4, #1e293b)",
+    "semanticComponents": [
+      "Converted raw formulas into KaTeX formula cards with variable keys",
+      "Replaced repetitive '1.' markers with sequential sections §1 through §6",
+      "Structured qualitative vs quantitative comparisons into high-contrast cards"
+    ],
+    "printSafety": "100% compliant with 0.45\" print bleed"
+  },
   "operations": [
     { "action": "add", "element": { ... } },
     { "action": "update", "id": "element-id", "changes": { ... } },
@@ -85,66 +99,40 @@ function generateDeterministicFallback(
   prompt: string,
   currentDocument?: DocumentModel,
   selectedElementId?: string
-): { message: string; operations: Operation[]; qualityChecks: any[] } {
+): { message: string; operations: Operation[]; qualityChecks: any[]; designReasoning?: any } {
   const doc = (currentDocument && currentDocument.elements) ? currentDocument : INITIAL_SAMPLE_DOCUMENT;
   const p = prompt.toLowerCase();
-  let operations: Operation[] = [];
-  let message = "PagePilot layout engine applied safe updates.";
 
-  if (p.includes("fix") || p.includes("margin") || p.includes("fit") || p.includes("overflow") || p.includes("layout")) {
-    const fixedDoc = autoFixSafeMargins(doc);
-    const resolvedDoc = autoFixOverlaps(fixedDoc);
-    operations = [{ action: "replace", elements: resolvedDoc.elements }];
-    message = 'Optimized all elements to strictly respect 0.45" safe print margins and resolved overlaps.';
-  } else if (p.includes("hand-copy") || p.includes("lines") || p.includes("practice")) {
-    const exists = doc.elements.some((el) => el.type === "writingLines");
-    if (!exists) {
-      operations = [
-        {
-          action: "add",
-          element: {
-            id: `el-writing-${Date.now()}`,
-            type: "writingLines",
-            x: 0.55, y: 7.2, width: 4.4, height: 3.25, zIndex: 10,
-            content: {
-              title: "Hand-Copy Practice & Student Math",
-              promptText: "Write out intermediate steps cleanly:",
-              lineCount: 7,
-            },
-            style: { backgroundColor: "#ffffff", borderColor: "#cbd5e1", borderWidth: 1, borderRadius: 8, padding: 12 },
-          },
-        },
-      ];
-      message = "Added ruled hand-copy practice container inside safe margins.";
-    } else {
-      message = "Ruled practice lines already exist on the canvas — they look great!";
-    }
-  } else if (selectedElementId) {
+  // If specific element selected and small modification requested
+  if (selectedElementId) {
     const el = doc.elements.find((e) => e.id === selectedElementId);
     if (el) {
       if (p.includes("wider")) {
         const newW = Math.min(7.5, el.width * 1.2);
-        operations = [{ action: "resize", id: el.id, width: newW, height: el.height }];
-        message = `Expanded width of "${el.metadata?.label || el.id}" to ${newW.toFixed(2)}".`;
+        return {
+          message: `Expanded width of "${el.metadata?.label || el.id}" to ${newW.toFixed(2)}".`,
+          operations: [{ action: "resize", id: el.id, width: newW, height: el.height }],
+          qualityChecks: [],
+        };
       } else if (p.includes("smaller") || p.includes("narrower")) {
         const newW = Math.max(1.0, el.width * 0.85);
-        operations = [{ action: "resize", id: el.id, width: newW, height: el.height }];
-        message = `Reduced width of "${el.metadata?.label || el.id}" to ${newW.toFixed(2)}".`;
-      } else {
-        operations = [{ action: "update", id: el.id, changes: { style: { ...el.style, borderColor: "#4f46e5" } } }];
-        message = `Refined styling of "${el.metadata?.label || el.id}".`;
+        return {
+          message: `Reduced width of "${el.metadata?.label || el.id}" to ${newW.toFixed(2)}".`,
+          operations: [{ action: "resize", id: el.id, width: newW, height: el.height }],
+          qualityChecks: [],
+        };
       }
     }
-  } else {
-    const fixedDoc = autoFixSafeMargins(doc);
-    operations = [{ action: "replace", elements: fixedDoc.elements }];
-    message = "Balanced document layout and verified print boundaries.";
   }
 
+  // Universal Smart Layout Architect Execution
+  const designResult = autoDesignDocument(doc, prompt);
+
   return {
-    message: `${message} (Add GEMINI_API_KEY in .env.local for full AI generation)`,
-    operations,
+    message: designResult.message,
+    operations: [{ action: "replace", elements: designResult.document.elements }],
     qualityChecks: [],
+    designReasoning: designResult.reasoning,
   };
 }
 

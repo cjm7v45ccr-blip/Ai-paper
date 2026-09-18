@@ -17,6 +17,7 @@ import {
   AlignmentGuide,
 } from "@/lib/coordinates";
 import { RotateCw, Lock } from "lucide-react";
+import { GoogleDocsRuler } from "./GoogleDocsRuler";
 
 interface DocumentCanvasProps {
   document: DocumentModel;
@@ -36,6 +37,7 @@ interface DocumentCanvasProps {
   onDuplicateElement?: (id: string) => void;
   isBlackAndWhite: boolean;
   showMargins: boolean;
+  onToggleMargins?: () => void;
   isPreviewMode?: boolean;
   isAnimating: boolean;
 }
@@ -54,6 +56,7 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = ({
   onDuplicateElement,
   isBlackAndWhite,
   showMargins,
+  onToggleMargins,
   isPreviewMode = false,
   isAnimating,
 }) => {
@@ -422,6 +425,17 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = ({
         <div className="no-print fixed top-20 left-1/2 -translate-x-1/2 bg-slate-900/90 text-white text-xs font-mono px-3 py-1.5 rounded-full shadow-lg z-50 pointer-events-none backdrop-blur animate-in fade-in duration-100">
           {dragTooltip}
         </div>
+      )}
+
+      {/* Google Docs Authentic Horizontal Ruler */}
+      {!isPreviewMode && (
+        <GoogleDocsRuler
+          pageWidthInches={pageWidth}
+          safeMarginInches={safeMargin}
+          zoom={zoom}
+          showMargins={showMargins}
+          onToggleMargins={onToggleMargins}
+        />
       )}
 
       {/* Page Canvas Container with Strict Aspect Ratio & Shadow */}

@@ -105,8 +105,18 @@ export const QualityCheckSchema = z.object({
   elementIds: z.array(z.string()).optional(),
 });
 
+export const DesignReasoningSchema = z.object({
+  documentType: z.string(),
+  gridSystem: z.string(),
+  typographyPairing: z.string(),
+  colorPalette: z.string(),
+  semanticComponents: z.array(z.string()),
+  printSafety: z.string(),
+}).optional();
+
 export const AIResponseSchema = z.object({
   message: z.string(),
   operations: z.array(OperationSchema),
   qualityChecks: z.array(QualityCheckSchema).default([]),
+  designReasoning: DesignReasoningSchema,
 });

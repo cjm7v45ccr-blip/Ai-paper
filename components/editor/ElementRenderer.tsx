@@ -40,8 +40,25 @@ export const ElementRenderer: React.FC<ElementRendererProps> = ({
       case "heading": {
         const title = typeof content === "object" ? content?.title : "Document Heading";
         const subtitle = typeof content === "object" ? content?.subtitle : undefined;
+        const badge = element.metadata?.badge;
+        const standard = element.metadata?.standard;
+
         return (
           <div className="w-full h-full flex flex-col justify-center px-1">
+            {(badge || standard) && (
+              <div className="flex items-center gap-2 mb-1 shrink-0">
+                {badge && (
+                  <span className="text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 uppercase">
+                    {badge}
+                  </span>
+                )}
+                {standard && (
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    {standard}
+                  </span>
+                )}
+              </div>
+            )}
             <h1
               className="font-extrabold tracking-tight break-words"
               style={{
@@ -79,19 +96,24 @@ export const ElementRenderer: React.FC<ElementRendererProps> = ({
         return (
           <div className="w-full h-full flex flex-col justify-between overflow-hidden p-1">
             {formulaTitle && (
-              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 shrink-0 pb-1">
-                <Sigma className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                <span className="truncate">{formulaTitle}</span>
+              <div className="flex items-center justify-between text-xs font-bold text-slate-800 shrink-0 pb-1 border-b border-slate-100">
+                <div className="flex items-center gap-1.5 truncate">
+                  <Sigma className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                  <span className="truncate">{formulaTitle}</span>
+                </div>
+                <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-100">
+                  LaTeX KaTeX
+                </span>
               </div>
             )}
-            <div className="flex-1 flex items-center justify-center p-2 bg-gradient-to-b from-slate-50 to-white rounded-lg border border-slate-200 shadow-2xs select-text overflow-x-auto min-h-0">
+            <div className="flex-1 flex items-center justify-center p-2.5 bg-gradient-to-b from-slate-50 to-white rounded-lg border border-slate-200 shadow-2xs select-text overflow-x-auto min-h-0 my-1">
               <MathRenderer latex={equation} displayMode={true} className="text-base md:text-lg text-slate-900 font-serif" />
             </div>
             {breakdown.length > 0 && (
-              <div className="grid grid-cols-2 gap-1.5 mt-2 shrink-0">
+              <div className="grid grid-cols-2 gap-1.5 shrink-0">
                 {breakdown.map((item, i) => (
-                  <div key={i} className="flex items-center gap-1.5 text-slate-700 bg-white/90 px-2 py-1 rounded border border-slate-200/90 shadow-2xs overflow-hidden">
-                    <span className="shrink-0 px-1.5 py-0.5 bg-indigo-50 border border-indigo-200 text-indigo-800 rounded font-serif text-[11px] leading-none flex items-center justify-center min-w-[20px]">
+                  <div key={i} className="flex items-center gap-1.5 text-slate-700 bg-white/95 px-2 py-1 rounded border border-slate-200/90 shadow-2xs overflow-hidden">
+                    <span className="shrink-0 px-1.5 py-0.5 bg-indigo-50 border border-indigo-200 text-indigo-800 rounded font-serif text-[11px] leading-none flex items-center justify-center min-w-[22px]">
                       <MathRenderer latex={item.symbol} displayMode={false} />
                     </span>
                     <span className="truncate text-[11px] font-medium text-slate-600">{parseInlineFormatting(item.label)}</span>
@@ -106,13 +128,25 @@ export const ElementRenderer: React.FC<ElementRendererProps> = ({
       case "callout": {
         const title = content?.title || "Key Takeaway";
         const body = content?.body || "Important note or concept takeaway.";
+        const categoryBadge = element.metadata?.categoryBadge;
+        const accentColor = element.metadata?.accentColor || "#10b981";
+
         return (
-          <div className="w-full h-full flex flex-col justify-center overflow-hidden">
-            <div className="flex items-center gap-1.5 font-semibold text-xs text-indigo-950 mb-1 shrink-0">
-              <span className="w-2 h-2 rounded-full bg-indigo-600 inline-block shrink-0" />
-              <span className="font-bold tracking-tight truncate">{parseInlineFormatting(title)}</span>
+          <div className="w-full h-full flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between gap-1.5 mb-1 shrink-0">
+              <div className="flex items-center gap-1.5 truncate">
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: accentColor }} />
+                <span className="font-bold tracking-tight text-xs truncate" style={{ color: style.color || "#0f172a" }}>
+                  {parseInlineFormatting(title)}
+                </span>
+              </div>
+              {categoryBadge && (
+                <span className="text-[9px] font-bold tracking-wider px-1.5 py-0.5 rounded bg-white/80 text-slate-600 uppercase border border-slate-200/80 shrink-0">
+                  {categoryBadge}
+                </span>
+              )}
             </div>
-            <div className="text-[12px] leading-snug text-indigo-950/90 overflow-hidden line-clamp-5">
+            <div className="text-[11.5px] leading-relaxed overflow-hidden flex-1 select-text" style={{ color: style.color || "#334155" }}>
               <MarkdownWithMath content={body} />
             </div>
           </div>
