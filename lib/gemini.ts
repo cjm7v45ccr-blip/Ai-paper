@@ -23,7 +23,7 @@ export function getGeminiModelName(): string {
   if (configured && !configured.includes("2.5-pro") && !configured.includes("1.5") && !configured.includes("2.0")) {
     return configured;
   }
-  return "gemini-2.5-flash";
+  return "gemini-3.8-flash";
 }
 
 export async function callGeminiWithFallback(params: {
@@ -39,10 +39,11 @@ export async function callGeminiWithFallback(params: {
   if (configured && !configured.includes("2.5-pro") && !configured.includes("1.5") && !configured.includes("2.0")) {
     candidateModels.push(configured);
   }
-  if (!candidateModels.includes("gemini-2.5-flash")) candidateModels.push("gemini-2.5-flash");
+  // Fastest and most accurate modern models first
   if (!candidateModels.includes("gemini-3.8-flash")) candidateModels.push("gemini-3.8-flash");
-  if (!candidateModels.includes("gemini-3.1-flash-lite-preview")) candidateModels.push("gemini-3.1-flash-lite-preview");
   if (!candidateModels.includes("gemini-flash-latest")) candidateModels.push("gemini-flash-latest");
+  if (!candidateModels.includes("gemini-3.1-flash-lite")) candidateModels.push("gemini-3.1-flash-lite");
+  if (!candidateModels.includes("gemini-2.5-flash")) candidateModels.push("gemini-2.5-flash");
 
   let lastError: any = null;
   for (const model of candidateModels) {
