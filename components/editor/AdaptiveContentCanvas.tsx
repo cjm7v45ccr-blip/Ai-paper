@@ -14,6 +14,9 @@ import {
   Edit3,
   Check,
   Sparkles,
+  BarChart3,
+  TrendingUp,
+  Activity,
 } from "lucide-react";
 import { MathRenderer } from "@/lib/math-markdown-engine";
 
@@ -247,14 +250,14 @@ export const AdaptiveContentCanvas: React.FC<AdaptiveContentCanvasProps> = ({
                   e.stopPropagation();
                   onSelectElement(elem.id);
                 }}
-                className={`group relative rounded-2xl p-4 sm:p-5 transition-all flex flex-col justify-between border ${
+                className={`group relative rounded-2xl p-5 transition-all flex flex-col justify-between border ${
                   isSelected
-                    ? "bg-[#181a24] border-indigo-500/80 shadow-lg ring-1 ring-indigo-500/40"
-                    : "bg-[#14161f] border-white/[0.08] hover:border-white/[0.18] hover:bg-[#181a24]"
+                    ? "bg-[#161822] border-indigo-500/80 shadow-lg ring-1 ring-indigo-500/30"
+                    : "bg-[#13151d] border-white/[0.06] hover:border-white/[0.12] hover:bg-[#161822]"
                 }`}
               >
                 {/* Top Action Hover Bar on Card */}
-                <div className="absolute top-2.5 right-2.5 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-20 bg-[#161822]/90 border border-white/[0.1] rounded-lg p-0.5 shadow-md">
+                <div className="absolute top-2.5 right-2.5 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-20 bg-[#161822]/95 border border-white/[0.1] rounded-lg p-0.5 shadow-md">
                   {idx > 0 && (
                     <button
                       onClick={(e) => {
@@ -301,7 +304,7 @@ export const AdaptiveContentCanvas: React.FC<AdaptiveContentCanvasProps> = ({
                       if (selectedElementId === elem.id) onSelectElement(null);
                     }}
                     className="p-1 rounded text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10"
-                    title="Delete card (reflows cleanly)"
+                    title="Delete card"
                   >
                     <Trash2 className="w-3 h-3" />
                   </button>
@@ -437,6 +440,68 @@ export const AdaptiveContentCanvas: React.FC<AdaptiveContentCanvasProps> = ({
                         </table>
                       </div>
                     </div>
+                  ) : elem.type === "chart" ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="text-xs font-semibold text-indigo-300 flex items-center gap-1.5">
+                          <BarChart3 className="w-3.5 h-3.5 text-indigo-400" />
+                          <span>{elem.content?.title || "Data Comparison"}</span>
+                        </div>
+                        <span className="text-[10px] font-mono text-zinc-400">SVG Render</span>
+                      </div>
+                      <div className="h-28 w-full bg-zinc-950/40 border border-white/[0.06] rounded-xl p-2.5 flex flex-col justify-between">
+                        <div className="flex-1 w-full relative">
+                          <svg className="w-full h-full" viewBox="0 0 400 100" preserveAspectRatio="none">
+                            <line x1="0" y1="20" x2="400" y2="20" stroke="#ffffff10" strokeDasharray="3 3" />
+                            <line x1="0" y1="50" x2="400" y2="50" stroke="#ffffff10" strokeDasharray="3 3" />
+                            <line x1="0" y1="80" x2="400" y2="80" stroke="#ffffff10" strokeDasharray="3 3" />
+                            {(elem.content?.series || [{ name: "Target", color: "#6366f1", values: [20, 45, 65, 95] }]).map((s: any, sIdx: number) => {
+                              const vals = s.values || [20, 40, 60, 80];
+                              const pts = vals.map((v: number, i: number) => {
+                                const x = (i / (vals.length - 1 || 1)) * 380 + 10;
+                                const y = 90 - (v / 100) * 80;
+                                return `${x},${y}`;
+                              }).join(" ");
+                              return (
+                                <g key={sIdx}>
+                                  <polyline fill="none" stroke={s.color || "#818cf8"} strokeWidth="2.5" points={pts} />
+                                  {vals.map((v: number, i: number) => {
+                                    const cx = (i / (vals.length - 1 || 1)) * 380 + 10;
+                                    const cy = 90 - (v / 100) * 80;
+                                    return <circle key={i} cx={cx} cy={cy} r="3" fill="#ffffff" stroke={s.color || "#818cf8"} strokeWidth="2" />;
+                                  })}
+                                </g>
+                              );
+                            })}
+                          </svg>
+                        </div>
+                        <div className="flex justify-between text-[9px] font-mono text-zinc-500 pt-1 border-t border-white/[0.05]">
+                          {(elem.content?.labels || ["Q1", "Q2", "Q3", "Q4"]).map((lbl: string, lIdx: number) => (
+                            <span key={lIdx}>{lbl}</span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ) : elem.type === "metric" ? (
+                    <div className="space-y-1.5 p-1">
+                      <div className="text-[11px] font-mono uppercase tracking-wider text-zinc-400">
+                        {elem.content?.title || "Key Metric"}
+                      </div>
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-2xl sm:text-3xl font-extrabold text-white font-mono tracking-tight">
+                          {elem.content?.value || "99.8%"}
+                        </span>
+                        {elem.content?.trend && (
+                          <span className="text-xs font-semibold text-emerald-400 flex items-center gap-0.5">
+                            <TrendingUp className="w-3 h-3" />
+                            {elem.content.trend}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-zinc-400 leading-snug">
+                        {elem.content?.subtitle || elem.content?.text || "High reliability throughput"}
+                      </p>
+                    </div>
                   ) : (
                     // General Text / Card block
                     <div className="space-y-1.5">
@@ -479,48 +544,53 @@ export const AdaptiveContentCanvas: React.FC<AdaptiveContentCanvasProps> = ({
                   )}
                 </div>
 
-                {/* Card Type Badge at Bottom */}
-                <div className="mt-3 pt-2 border-t border-white/[0.04] flex items-center justify-between text-[10px] text-zinc-500 font-mono">
-                  <span className="uppercase">{elem.type}</span>
-                  <span className="text-[10px] text-zinc-600">Drag to reorder</span>
+                {/* Card footer indicator: minimal type tag visible only on hover/select */}
+                <div className="mt-3 pt-2 border-t border-white/[0.03] flex items-center justify-between text-[10px] text-zinc-600 font-mono">
+                  <span className="uppercase tracking-wider">{elem.type}</span>
                 </div>
               </div>
             );
           })}
         </div>
 
-        {/* 3. Bottom Inline Card Adder Bar */}
-        <div className="mt-6 pt-4 border-t border-white/[0.06] flex items-center justify-center gap-2 text-xs">
-          <span className="text-zinc-500 text-[11px]">Add content block:</span>
+        {/* 3. Bottom Inline Card Adder Bar - Modern, Minimal & Clean */}
+        <div className="mt-8 pt-4 border-t border-white/[0.06] flex flex-wrap items-center justify-center gap-1.5 text-xs">
+          <span className="text-zinc-500 text-[11px] mr-1">+ Add:</span>
           <button
             onClick={() => onAddBlock("text")}
-            className="px-2.5 py-1 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-zinc-400 hover:text-white transition-colors"
+            className="px-2.5 py-1 rounded-lg bg-white/[0.03] hover:bg-white/[0.08] text-zinc-400 hover:text-white transition-colors"
           >
-            + Text
+            Text
           </button>
           <button
             onClick={() => onAddBlock("callout")}
-            className="px-2.5 py-1 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-zinc-400 hover:text-white transition-colors"
+            className="px-2.5 py-1 rounded-lg bg-white/[0.03] hover:bg-white/[0.08] text-zinc-400 hover:text-white transition-colors"
           >
-            + Callout
+            Callout
           </button>
           <button
-            onClick={() => onAddBlock("formula")}
-            className="px-2.5 py-1 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-zinc-400 hover:text-white transition-colors"
+            onClick={() => onAddBlock("chart")}
+            className="px-2.5 py-1 rounded-lg bg-white/[0.03] hover:bg-white/[0.08] text-zinc-400 hover:text-white transition-colors"
           >
-            + Math Formula
+            Chart
           </button>
           <button
             onClick={() => onAddBlock("table")}
-            className="px-2.5 py-1 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-zinc-400 hover:text-white transition-colors"
+            className="px-2.5 py-1 rounded-lg bg-white/[0.03] hover:bg-white/[0.08] text-zinc-400 hover:text-white transition-colors"
           >
-            + Table
+            Table
+          </button>
+          <button
+            onClick={() => onAddBlock("formula")}
+            className="px-2.5 py-1 rounded-lg bg-white/[0.03] hover:bg-white/[0.08] text-zinc-400 hover:text-white transition-colors"
+          >
+            Formula
           </button>
           <button
             onClick={() => onAddBlock("checkboxGroup")}
-            className="px-2.5 py-1 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-zinc-400 hover:text-white transition-colors"
+            className="px-2.5 py-1 rounded-lg bg-white/[0.03] hover:bg-white/[0.08] text-zinc-400 hover:text-white transition-colors"
           >
-            + Checklist
+            Checklist
           </button>
         </div>
       </div>

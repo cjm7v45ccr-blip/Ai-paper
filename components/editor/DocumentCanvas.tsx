@@ -190,10 +190,15 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = ({
         const snapRes = computeSnapAndGuides(
           { id, x: targetXInches, y: targetYInches, width, height },
           otherElements,
-          0.08,
-          pageWidth,
-          pageHeight,
-          safeMargin
+          {
+            thresholdInches: 0.08,
+            pageWidth,
+            pageHeight,
+            safeMargin,
+            snapToGrid: true,
+            snapToGuides: true,
+            isAltPressed: e.altKey,
+          }
         );
 
         setActiveGuides(snapRes.guides);

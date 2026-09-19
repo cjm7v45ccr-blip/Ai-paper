@@ -3,9 +3,42 @@ export type DocumentMode =
   | "presentation"
   | "worksheet"
   | "report"
-  | "research"
+  | "study-guide"
   | "proposal"
-  | "one-pager";
+  | "one-pager"
+  | "blank"
+  | "hybrid";
+
+export type PageLayoutType =
+  | "flow"
+  | "visual"
+  | "canvas"
+  | "worksheet"
+  | "table"
+  | "report"
+  | "presentation"
+  | "study-guide"
+  | "proposal"
+  | "one-pager"
+  | "blank"
+  | "hybrid";
+
+export interface DocumentComment {
+  id: string;
+  author: string;
+  text: string;
+  timestamp?: string;
+  createdAt?: string;
+  resolved?: boolean;
+  elementId?: string;
+}
+
+export interface DocumentCitation {
+  id: string;
+  number?: number;
+  text: string;
+  url?: string;
+}
 
 export type ElementType =
   | "text"
@@ -44,12 +77,17 @@ export interface ElementStyle {
   borderStyle?: "solid" | "dashed" | "dotted" | "none";
   fontSize?: number;
   fontWeight?: number | string;
-  fontFamily?: string;
+  fontStyle?: "normal" | "italic" | "oblique" | string;
+  textDecoration?: "none" | "underline" | "line-through" | string;
+  letterSpacing?: number;
+  textTransform?: "none" | "uppercase" | "lowercase" | "capitalize" | string;
   textAlign?: "left" | "center" | "right" | "justify";
   opacity?: number;
   boxShadow?: string;
   padding?: number;
   lineHeight?: number;
+  objectFit?: "contain" | "cover" | "fill";
+  [key: string]: any;
 }
 
 export interface DocumentElement {
@@ -88,10 +126,15 @@ export interface DocumentElement {
 export interface PageData {
   id: string;
   title?: string;
+  layoutType?: PageLayoutType;
+  speakerNotes?: string;
   elements: DocumentElement[];
   background?: string;
   isOverflowing?: boolean;
   computedHeightInches?: number;
+  headerText?: string;
+  footerText?: string;
+  pageNumber?: number;
 }
 
 export interface DocumentPage {
@@ -121,6 +164,8 @@ export interface DocumentModel {
   theme: DocumentTheme;
   pages?: PageData[]; // Multi-page / multi-slide support
   elements: DocumentElement[]; // Single-page compatibility and fallback
+  comments?: DocumentComment[];
+  citations?: DocumentCitation[];
 }
 
 export type Operation =

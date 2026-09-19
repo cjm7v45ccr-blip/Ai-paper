@@ -28,6 +28,13 @@ import {
   FileSpreadsheet,
   FileText,
   Presentation,
+  Image as ImageIcon,
+  AlignStartVertical,
+  AlignEndVertical,
+  AlignStartHorizontal,
+  AlignEndHorizontal,
+  AlignHorizontalJustifyCenter,
+  AlignVerticalJustifyCenter,
 } from "lucide-react";
 import { DocumentModel, DocumentElement, DocumentMode } from "@/types/document";
 import katex from "katex";
@@ -48,6 +55,8 @@ interface RightInspectorProps {
   onToggleBW: () => void;
   onTriggerAIModification?: (elementId: string, prompt: string) => void;
   onTransformPage?: (action: "visual" | "flow" | "balance" | "paginate") => void;
+  isCollapsed?: boolean;
+  onToggleCollapsed?: (collapsed: boolean) => void;
 }
 
 export const RightInspector: React.FC<RightInspectorProps> = ({
@@ -66,33 +75,29 @@ export const RightInspector: React.FC<RightInspectorProps> = ({
   onToggleBW,
   onTriggerAIModification,
   onTransformPage,
+  isCollapsed: controlledCollapsed,
+  onToggleCollapsed,
 }) => {
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [internalCollapsed, setInternalCollapsed] = useState(false);
   const [aiPrompt, setAiPrompt] = useState("");
   const [isAiLoading, setIsAiLoading] = useState(false);
 
+  const isCollapsed = controlledCollapsed !== undefined ? controlledCollapsed : internalCollapsed;
+  const setCollapsed = (val: boolean) => {
+    if (onToggleCollapsed) onToggleCollapsed(val);
+    else setInternalCollapsed(val);
+  };
+
   if (isCollapsed) {
     return (
-      <div className="no-print w-11 bg-[#111215] border-l border-white/[0.07] flex flex-col items-center py-3 select-none shrink-0 z-20 transition-all">
+      <div className="no-print w-10 bg-[#0e1017] border-l border-white/[0.08] flex flex-col items-center py-3 select-none shrink-0 z-20 transition-all">
         <button
-          onClick={() => setIsCollapsed(false)}
-          className="p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-white/[0.07] transition-colors"
-          title="Expand Properties Inspector"
+          onClick={() => setCollapsed(false)}
+          className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-200 hover:bg-white/[0.06] transition-colors"
+          title="Open Properties Inspector"
         >
-          <PanelRightOpen className="w-4 h-4" />
+          <Sliders className="w-4 h-4" />
         </button>
-
-        <div className="h-px w-6 bg-white/[0.07] my-3" />
-
-        <div className="flex flex-col gap-2 text-zinc-400">
-          <button
-            onClick={() => setIsCollapsed(false)}
-            className="p-2 rounded-lg hover:bg-white/[0.07] hover:text-white"
-            title="Properties"
-          >
-            <Sliders className="w-4 h-4" />
-          </button>
-        </div>
       </div>
     );
   }
@@ -107,19 +112,19 @@ export const RightInspector: React.FC<RightInspectorProps> = ({
   };
 
   return (
-    <aside className="no-print w-72 bg-[#111215] text-zinc-300 border-l border-white/[0.07] flex flex-col h-[calc(100vh-3.25rem)] select-none shrink-0 z-20 transition-all">
+    <aside className="no-print w-72 bg-[#10121a] text-zinc-300 border-l border-white/[0.08] flex flex-col h-[calc(100vh-3.25rem)] select-none shrink-0 z-20 transition-all shadow-xl">
       {/* Header bar */}
       <div className="p-2.5 border-b border-white/[0.07] flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Sliders className="w-4 h-4 text-indigo-400" />
           <span className="text-xs font-semibold text-zinc-200">
-            {selectedElement ? "Element Properties" : "Document & Page Settings"}
+            {selectedElement ? "Properties" : "Page Settings"}
           </span>
         </div>
 
         <button
-          onClick={() => setIsCollapsed(true)}
-          className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/[0.07] transition-colors"
+          onClick={() => setCollapsed(true)}
+          className="p-1.5 rounded-lg text-zinc-500 hover:text-white hover:bg-white/[0.06] transition-colors"
           title="Collapse Inspector"
         >
           <PanelRightClose className="w-3.5 h-3.5" />
@@ -289,6 +294,87 @@ export const RightInspector: React.FC<RightInspectorProps> = ({
                   />
                 </div>
               </div>
+
+              {/* Align & Arrange Tools (Google Slides & Figma Engine) */}
+              <div className="pt-2 border-t border-white/[0.06] space-y-1.5">
+                <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider flex items-center justify-between">
+                  <span>Align on Slide / Page</span>
+                  <span className="text-[9px] text-indigo-400">Snap Ready</span>
+                </div>
+                <div className="grid grid-cols-6 gap-1 bg-[#14151a] p-1 rounded-lg border border-white/[0.06]">
+                  <button
+                    onClick={() => onUpdateElement(selectedElement.id, { x: 0.65 })}
+                    className="p-1.5 rounded hover:bg-white/10 text-zinc-400 hover:text-white flex items-center justify-center transition-colors"
+                    title="Align Left (Margin)"
+                  >
+                    <AlignStartVertical className="w-3.5 h-3.5" />
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      const pageW = doc.mode === "presentation" ? 13.33 : 8.5;
+                      const elemW = selectedElement.width || 4.0;
+                      onUpdateElement(selectedElement.id, {
+                        x: Math.round(((pageW - elemW) / 2) * 1000) / 1000,
+                      });
+                    }}
+                    className="p-1.5 rounded hover:bg-white/10 text-zinc-400 hover:text-white flex items-center justify-center transition-colors"
+                    title="Center Horizontally"
+                  >
+                    <AlignHorizontalJustifyCenter className="w-3.5 h-3.5" />
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      const pageW = doc.mode === "presentation" ? 13.33 : 8.5;
+                      const elemW = selectedElement.width || 4.0;
+                      onUpdateElement(selectedElement.id, {
+                        x: Math.round((pageW - 0.65 - elemW) * 1000) / 1000,
+                      });
+                    }}
+                    className="p-1.5 rounded hover:bg-white/10 text-zinc-400 hover:text-white flex items-center justify-center transition-colors"
+                    title="Align Right (Margin)"
+                  >
+                    <AlignEndVertical className="w-3.5 h-3.5" />
+                  </button>
+
+                  <button
+                    onClick={() => onUpdateElement(selectedElement.id, { y: 0.65 })}
+                    className="p-1.5 rounded hover:bg-white/10 text-zinc-400 hover:text-white flex items-center justify-center transition-colors"
+                    title="Align Top (Margin)"
+                  >
+                    <AlignStartHorizontal className="w-3.5 h-3.5" />
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      const pageH = doc.mode === "presentation" ? 7.5 : 11.0;
+                      const elemH = selectedElement.height || 2.0;
+                      onUpdateElement(selectedElement.id, {
+                        y: Math.round(((pageH - elemH) / 2) * 1000) / 1000,
+                      });
+                    }}
+                    className="p-1.5 rounded hover:bg-white/10 text-zinc-400 hover:text-white flex items-center justify-center transition-colors"
+                    title="Center Vertically"
+                  >
+                    <AlignVerticalJustifyCenter className="w-3.5 h-3.5" />
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      const pageH = doc.mode === "presentation" ? 7.5 : 11.0;
+                      const elemH = selectedElement.height || 2.0;
+                      onUpdateElement(selectedElement.id, {
+                        y: Math.round((pageH - 0.65 - elemH) * 1000) / 1000,
+                      });
+                    }}
+                    className="p-1.5 rounded hover:bg-white/10 text-zinc-400 hover:text-white flex items-center justify-center transition-colors"
+                    title="Align Bottom (Margin)"
+                  >
+                    <AlignEndHorizontal className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
             </div>
 
             {/* 2. Specific Element Editors */}
@@ -405,6 +491,73 @@ export const RightInspector: React.FC<RightInspectorProps> = ({
                   placeholder="Body takeaway text..."
                   className="w-full bg-[#111215] border border-white/[0.08] rounded-lg p-2 text-xs text-zinc-300 outline-none focus:border-amber-500/50"
                 />
+              </div>
+            )}
+
+            {/* Image Block Editor */}
+            {selectedElement.type === "image" && (
+              <div className="space-y-2.5 bg-[#18191e] border border-white/[0.07] rounded-xl p-3">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-sky-400">
+                  <ImageIcon className="w-3.5 h-3.5" />
+                  <span>Image & Visual Properties</span>
+                </div>
+
+                {/* Tag Badge */}
+                <div className="space-y-1">
+                  <div className="text-[10px] font-mono text-zinc-400 uppercase">Image Tag / Category</div>
+                  <input
+                    type="text"
+                    value={selectedElement.content?.tag || "IMAGE"}
+                    onChange={(e) =>
+                      onUpdateElement(selectedElement.id, {
+                        content: { ...(selectedElement.content || {}), tag: e.target.value.toUpperCase() },
+                      })
+                    }
+                    placeholder="e.g. ARCHITECTURE, CHART, DIAGRAM"
+                    className="w-full bg-[#111215] border border-white/[0.08] rounded-lg px-2.5 py-1.5 text-xs font-mono text-indigo-300 outline-none focus:border-sky-500/50"
+                  />
+                </div>
+
+                {/* Caption */}
+                <div className="space-y-1">
+                  <div className="text-[10px] font-mono text-zinc-400 uppercase">Caption / Description</div>
+                  <input
+                    type="text"
+                    value={selectedElement.content?.caption || ""}
+                    onChange={(e) =>
+                      onUpdateElement(selectedElement.id, {
+                        content: { ...(selectedElement.content || {}), caption: e.target.value },
+                      })
+                    }
+                    placeholder="Caption text displayed beneath image"
+                    className="w-full bg-[#111215] border border-white/[0.08] rounded-lg px-2.5 py-1.5 text-xs text-zinc-200 outline-none focus:border-sky-500/50"
+                  />
+                </div>
+
+                {/* Object fit toggle */}
+                <div className="flex items-center justify-between pt-1">
+                  <span className="text-[11px] text-zinc-400">Fit Mode</span>
+                  <div className="flex items-center gap-1">
+                    {(["contain", "cover"] as const).map((fit) => (
+                      <button
+                        key={fit}
+                        type="button"
+                        onClick={() =>
+                          onUpdateElement(selectedElement.id, {
+                            style: { ...selectedElement.style, objectFit: fit },
+                          })
+                        }
+                        className={`px-2.5 py-1 rounded text-[10px] font-mono uppercase transition-colors ${
+                          (selectedElement.style?.objectFit || "contain") === fit
+                            ? "bg-indigo-600 text-white"
+                            : "bg-[#111215] text-zinc-400 hover:text-white"
+                        }`}
+                      >
+                        {fit}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             )}
 

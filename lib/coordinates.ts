@@ -113,14 +113,29 @@ export function clampElementBounds<T extends { x: number; y: number; width: numb
 
 export interface AlignmentGuide {
   type: "vertical" | "horizontal";
-  position: number; // inches
+  position: number; // in inches
   label?: string;
+  guideType: "center" | "margin" | "peer" | "grid" | "spacing";
+  matchType?: "edge" | "center" | "margin" | "spacing";
+}
+
+export interface SnapOptions {
+  snapToGrid?: boolean;
+  gridStep?: number; // default 0.125" (1/8 inch)
+  snapToGuides?: boolean;
+  thresholdInches?: number; // default 0.10"
+  pageWidth?: number;
+  pageHeight?: number;
+  safeMargin?: number;
+  isAltPressed?: boolean; // When true, snaps are completely disabled (Google Slides precision override)
 }
 
 export interface SnapResult {
   x: number;
   y: number;
   guides: AlignmentGuide[];
+  snappedX: boolean;
+  snappedY: boolean;
 }
 
 /**
@@ -129,114 +144,145 @@ export interface SnapResult {
 export function computeSnapAndGuides(
   target: { id: string; x: number; y: number; width: number; height: number },
   otherElements: Array<{ id: string; x: number; y: number; width: number; height: number }>,
-  thresholdInches = 0.08,
-  pageWidth = PAGE_WIDTH_INCHES,
-  pageHeight = PAGE_HEIGHT_INCHES,
-  safeMargin = SAFE_MARGIN_INCHES
+  options: SnapOptions = {}
 ): SnapResult {
+  const {
+    snapToGrid: enableGrid = true,
+    gridStep = 0.125,
+    snapToGuides: enableGuides = true,
+    thresholdInches = 0.10,
+    pageWidth = PAGE_WIDTH_INCHES,
+    pageHeight = PAGE_HEIGHT_INCHES,
+    safeMargin = SAFE_MARGIN_INCHES,
+    isAltPressed = false,
+  } = options;
+
   let snapX = target.x;
   let snapY = target.y;
   const activeGuides: AlignmentGuide[] = [];
+  let snappedX = false;
+  let snappedY = false;
+
+  // If Alt/Option is held, bypass all snapping for free precision movement
+  if (isAltPressed) {
+    const clamped = clampPosition(target.x, target.y, target.width, target.height, pageWidth, pageHeight);
+    return {
+      x: clamped.x,
+      y: clamped.y,
+      guides: [],
+      snappedX: false,
+      snappedY: false,
+    };
+  }
 
   const targetRight = target.x + target.width;
   const targetCenterX = target.x + target.width / 2;
   const targetBottom = target.y + target.height;
   const targetCenterY = target.y + target.height / 2;
 
-  // Key page alignment lines (in inches)
-  const verticalTargets: Array<{ pos: number; label: string }> = [
-    { pos: safeMargin, label: "Left Margin" },
-    { pos: pageWidth / 2, label: "Center" },
-    { pos: pageWidth - safeMargin, label: "Right Margin" },
-  ];
+  if (enableGuides) {
+    // 1. Vertical guide targets (X-axis snap)
+    const verticalTargets: Array<{ pos: number; label: string; guideType: "center" | "margin" | "peer"; matchType: "edge" | "center" | "margin" }> = [
+      { pos: safeMargin, label: "Left Margin", guideType: "margin", matchType: "margin" },
+      { pos: pageWidth / 2, label: "Center Axis", guideType: "center", matchType: "center" },
+      { pos: pageWidth - safeMargin, label: "Right Margin", guideType: "margin", matchType: "margin" },
+    ];
 
-  const horizontalTargets: Array<{ pos: number; label: string }> = [
-    { pos: safeMargin, label: "Top Margin" },
-    { pos: pageHeight / 2, label: "Middle" },
-    { pos: pageHeight - safeMargin, label: "Bottom Margin" },
-  ];
+    // 2. Horizontal guide targets (Y-axis snap)
+    const horizontalTargets: Array<{ pos: number; label: string; guideType: "center" | "margin" | "peer"; matchType: "edge" | "center" | "margin" }> = [
+      { pos: safeMargin, label: "Top Margin", guideType: "margin", matchType: "margin" },
+      { pos: pageHeight / 2, label: "Middle Axis", guideType: "center", matchType: "center" },
+      { pos: pageHeight - safeMargin, label: "Bottom Margin", guideType: "margin", matchType: "margin" },
+    ];
 
-  // Add peer element edges and centers
-  for (const other of otherElements) {
-    if (other.id === target.id) continue;
-    verticalTargets.push(
-      { pos: other.x, label: "Align Left" },
-      { pos: other.x + other.width / 2, label: "Align Center" },
-      { pos: other.x + other.width, label: "Align Right" }
-    );
-    horizontalTargets.push(
-      { pos: other.y, label: "Align Top" },
-      { pos: other.y + other.height / 2, label: "Align Middle" },
-      { pos: other.y + other.height, label: "Align Bottom" }
-    );
+    // Add peer element edges and centers
+    for (const other of otherElements) {
+      if (other.id === target.id) continue;
+      verticalTargets.push(
+        { pos: other.x, label: "Align Left", guideType: "peer", matchType: "edge" },
+        { pos: other.x + other.width / 2, label: "Align Center", guideType: "peer", matchType: "center" },
+        { pos: other.x + other.width, label: "Align Right", guideType: "peer", matchType: "edge" }
+      );
+      horizontalTargets.push(
+        { pos: other.y, label: "Align Top", guideType: "peer", matchType: "edge" },
+        { pos: other.y + other.height / 2, label: "Align Middle", guideType: "peer", matchType: "center" },
+        { pos: other.y + other.height, label: "Align Bottom", guideType: "peer", matchType: "edge" }
+      );
+    }
+
+    // Check vertical snaps (X-axis)
+    let bestDeltaX = thresholdInches + 0.001;
+    let bestGuideX: AlignmentGuide | null = null;
+    let bestSnapX = snapX;
+
+    for (const vt of verticalTargets) {
+      // Snap target's left edge
+      if (Math.abs(target.x - vt.pos) < bestDeltaX) {
+        bestDeltaX = Math.abs(target.x - vt.pos);
+        bestSnapX = vt.pos;
+        bestGuideX = { type: "vertical", position: vt.pos, label: vt.label, guideType: vt.guideType, matchType: vt.matchType };
+      }
+      // Snap target's center
+      if (Math.abs(targetCenterX - vt.pos) < bestDeltaX) {
+        bestDeltaX = Math.abs(targetCenterX - vt.pos);
+        bestSnapX = vt.pos - target.width / 2;
+        bestGuideX = { type: "vertical", position: vt.pos, label: vt.label, guideType: vt.guideType, matchType: vt.matchType };
+      }
+      // Snap target's right edge
+      if (Math.abs(targetRight - vt.pos) < bestDeltaX) {
+        bestDeltaX = Math.abs(targetRight - vt.pos);
+        bestSnapX = vt.pos - target.width;
+        bestGuideX = { type: "vertical", position: vt.pos, label: vt.label, guideType: vt.guideType, matchType: vt.matchType };
+      }
+    }
+
+    if (bestDeltaX <= thresholdInches && bestGuideX) {
+      snapX = bestSnapX;
+      activeGuides.push(bestGuideX);
+      snappedX = true;
+    }
+
+    // Check horizontal snaps (Y-axis)
+    let bestDeltaY = thresholdInches + 0.001;
+    let bestGuideY: AlignmentGuide | null = null;
+    let bestSnapY = snapY;
+
+    for (const ht of horizontalTargets) {
+      // Snap target's top edge
+      if (Math.abs(target.y - ht.pos) < bestDeltaY) {
+        bestDeltaY = Math.abs(target.y - ht.pos);
+        bestSnapY = ht.pos;
+        bestGuideY = { type: "horizontal", position: ht.pos, label: ht.label, guideType: ht.guideType, matchType: ht.matchType };
+      }
+      // Snap target's center
+      if (Math.abs(targetCenterY - ht.pos) < bestDeltaY) {
+        bestDeltaY = Math.abs(targetCenterY - ht.pos);
+        bestSnapY = ht.pos - target.height / 2;
+        bestGuideY = { type: "horizontal", position: ht.pos, label: ht.label, guideType: ht.guideType, matchType: ht.matchType };
+      }
+      // Snap target's bottom edge
+      if (Math.abs(targetBottom - ht.pos) < bestDeltaY) {
+        bestDeltaY = Math.abs(targetBottom - ht.pos);
+        bestSnapY = ht.pos - target.height;
+        bestGuideY = { type: "horizontal", position: ht.pos, label: ht.label, guideType: ht.guideType, matchType: ht.matchType };
+      }
+    }
+
+    if (bestDeltaY <= thresholdInches && bestGuideY) {
+      snapY = bestSnapY;
+      activeGuides.push(bestGuideY);
+      snappedY = true;
+    }
   }
 
-  // Check vertical snaps (X-axis)
-  let bestDeltaX = thresholdInches + 1;
-  let bestGuideX: AlignmentGuide | null = null;
-  let bestSnapX = snapX;
-
-  for (const vt of verticalTargets) {
-    // Snap target's left edge
-    if (Math.abs(target.x - vt.pos) < bestDeltaX) {
-      bestDeltaX = Math.abs(target.x - vt.pos);
-      bestSnapX = vt.pos;
-      bestGuideX = { type: "vertical", position: vt.pos, label: vt.label };
-    }
-    // Snap target's center
-    if (Math.abs(targetCenterX - vt.pos) < bestDeltaX) {
-      bestDeltaX = Math.abs(targetCenterX - vt.pos);
-      bestSnapX = vt.pos - target.width / 2;
-      bestGuideX = { type: "vertical", position: vt.pos, label: vt.label };
-    }
-    // Snap target's right edge
-    if (Math.abs(targetRight - vt.pos) < bestDeltaX) {
-      bestDeltaX = Math.abs(targetRight - vt.pos);
-      bestSnapX = vt.pos - target.width;
-      bestGuideX = { type: "vertical", position: vt.pos, label: vt.label };
-    }
+  // If no guide snap on X and grid is enabled, apply grid snap
+  if (!snappedX && enableGrid) {
+    snapX = snapToGrid(snapX, gridStep);
   }
 
-  if (bestDeltaX <= thresholdInches && bestGuideX) {
-    snapX = bestSnapX;
-    activeGuides.push(bestGuideX);
-  } else {
-    // Standard grid snap
-    snapX = snapToGrid(snapX);
-  }
-
-  // Check horizontal snaps (Y-axis)
-  let bestDeltaY = thresholdInches + 1;
-  let bestGuideY: AlignmentGuide | null = null;
-  let bestSnapY = snapY;
-
-  for (const ht of horizontalTargets) {
-    // Snap target's top edge
-    if (Math.abs(target.y - ht.pos) < bestDeltaY) {
-      bestDeltaY = Math.abs(target.y - ht.pos);
-      bestSnapY = ht.pos;
-      bestGuideY = { type: "horizontal", position: ht.pos, label: ht.label };
-    }
-    // Snap target's center
-    if (Math.abs(targetCenterY - ht.pos) < bestDeltaY) {
-      bestDeltaY = Math.abs(targetCenterY - ht.pos);
-      bestSnapY = ht.pos - target.height / 2;
-      bestGuideY = { type: "horizontal", position: ht.pos, label: ht.label };
-    }
-    // Snap target's bottom edge
-    if (Math.abs(targetBottom - ht.pos) < bestDeltaY) {
-      bestDeltaY = Math.abs(targetBottom - ht.pos);
-      bestSnapY = ht.pos - target.height;
-      bestGuideY = { type: "horizontal", position: ht.pos, label: ht.label };
-    }
-  }
-
-  if (bestDeltaY <= thresholdInches && bestGuideY) {
-    snapY = bestSnapY;
-    activeGuides.push(bestGuideY);
-  } else {
-    // Standard grid snap
-    snapY = snapToGrid(snapY);
+  // If no guide snap on Y and grid is enabled, apply grid snap
+  if (!snappedY && enableGrid) {
+    snapY = snapToGrid(snapY, gridStep);
   }
 
   // Clamp strictly within page bounds
@@ -245,6 +291,129 @@ export function computeSnapAndGuides(
   return {
     x: clamped.x,
     y: clamped.y,
+    guides: activeGuides,
+    snappedX,
+    snappedY,
+  };
+}
+
+/**
+ * Resize snapping for 8-point handles with smart guide alignment
+ */
+export function computeResizeSnapAndGuides(
+  target: { id: string; x: number; y: number; width: number; height: number },
+  handle: string,
+  otherElements: Array<{ id: string; x: number; y: number; width: number; height: number }>,
+  options: SnapOptions = {}
+): {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  guides: AlignmentGuide[];
+} {
+  const {
+    snapToGrid: enableGrid = true,
+    gridStep = 0.125,
+    snapToGuides: enableGuides = true,
+    thresholdInches = 0.10,
+    pageWidth = PAGE_WIDTH_INCHES,
+    pageHeight = PAGE_HEIGHT_INCHES,
+    safeMargin = SAFE_MARGIN_INCHES,
+    isAltPressed = false,
+  } = options;
+
+  let newX = target.x;
+  let newY = target.y;
+  let newW = target.width;
+  let newH = target.height;
+  const activeGuides: AlignmentGuide[] = [];
+
+  if (isAltPressed) {
+    const clampedDim = clampDimensions(newX, newY, newW, newH, pageWidth, pageHeight);
+    return { x: newX, y: newY, width: clampedDim.width, height: clampedDim.height, guides: [] };
+  }
+
+  // Right edge snap (e, ne, se)
+  if (handle.includes("e")) {
+    const currentRight = newX + newW;
+    let bestSnapRight = currentRight;
+    let minDelta = thresholdInches + 0.001;
+    let guide: AlignmentGuide | null = null;
+
+    if (enableGuides) {
+      const vTargets = [
+        { pos: pageWidth - safeMargin, label: "Right Margin" },
+        { pos: pageWidth / 2, label: "Center Axis" },
+        ...otherElements
+          .filter((el) => el.id !== target.id)
+          .flatMap((el) => [
+            { pos: el.x, label: "Align Left" },
+            { pos: el.x + el.width, label: "Align Right" },
+          ]),
+      ];
+
+      for (const vt of vTargets) {
+        const delta = Math.abs(currentRight - vt.pos);
+        if (delta < minDelta) {
+          minDelta = delta;
+          bestSnapRight = vt.pos;
+          guide = { type: "vertical", position: vt.pos, label: vt.label, guideType: "peer" };
+        }
+      }
+    }
+
+    if (minDelta <= thresholdInches && guide) {
+      newW = Math.max(MIN_ELEMENT_WIDTH, bestSnapRight - newX);
+      activeGuides.push(guide);
+    } else if (enableGrid) {
+      newW = Math.max(MIN_ELEMENT_WIDTH, snapToGrid(newW, gridStep));
+    }
+  }
+
+  // Bottom edge snap (s, se, sw)
+  if (handle.includes("s")) {
+    const currentBottom = newY + newH;
+    let bestSnapBottom = currentBottom;
+    let minDelta = thresholdInches + 0.001;
+    let guide: AlignmentGuide | null = null;
+
+    if (enableGuides) {
+      const hTargets = [
+        { pos: pageHeight - safeMargin, label: "Bottom Margin" },
+        { pos: pageHeight / 2, label: "Middle Axis" },
+        ...otherElements
+          .filter((el) => el.id !== target.id)
+          .flatMap((el) => [
+            { pos: el.y, label: "Align Top" },
+            { pos: el.y + el.height, label: "Align Bottom" },
+          ]),
+      ];
+
+      for (const ht of hTargets) {
+        const delta = Math.abs(currentBottom - ht.pos);
+        if (delta < minDelta) {
+          minDelta = delta;
+          bestSnapBottom = ht.pos;
+          guide = { type: "horizontal", position: ht.pos, label: ht.label, guideType: "peer" };
+        }
+      }
+    }
+
+    if (minDelta <= thresholdInches && guide) {
+      newH = Math.max(MIN_ELEMENT_HEIGHT, bestSnapBottom - newY);
+      activeGuides.push(guide);
+    } else if (enableGrid) {
+      newH = Math.max(MIN_ELEMENT_HEIGHT, snapToGrid(newH, gridStep));
+    }
+  }
+
+  const clampedDim = clampDimensions(newX, newY, newW, newH, pageWidth, pageHeight);
+  return {
+    x: newX,
+    y: newY,
+    width: clampedDim.width,
+    height: clampedDim.height,
     guides: activeGuides,
   };
 }

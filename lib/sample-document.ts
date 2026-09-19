@@ -1,4 +1,4 @@
-import { DocumentModel, DocumentElement, PageData } from "@/types/document";
+import { DocumentModel, DocumentElement, PageData, DocumentMode } from "@/types/document";
 
 // Sample Page 1 for Document Mode
 const docPage1Elements: DocumentElement[] = [
@@ -323,6 +323,7 @@ const docPage2Elements: DocumentElement[] = [
 ];
 
 export const INITIAL_SAMPLE_DOCUMENT: DocumentModel = {
+  id: "doc-sample-compound-interest",
   title: "Compound Interest & Capital Growth",
   mode: "document",
   page: {
@@ -358,6 +359,7 @@ export const INITIAL_SAMPLE_DOCUMENT: DocumentModel = {
 
 // 16:9 Presentation Preset (Slide Deck)
 export const SAMPLE_PRESENTATION_DECK: DocumentModel = {
+  id: "doc-sample-pagepilot-pitch",
   title: "PagePilot AI Workspace Pitch",
   mode: "presentation",
   page: {
@@ -934,3 +936,77 @@ export const SAMPLE_ONE_PAGER: DocumentModel = {
   ],
   elements: [],
 };
+
+/**
+ * Creates a clean, empty blank document or presentation.
+ * Allows the user to type notes, add images, and have AI format and move things.
+ */
+export function createBlankDocument(
+  mode: DocumentMode = "document",
+  title?: string
+): DocumentModel {
+  const isPres = mode === "presentation";
+  const now = Date.now();
+  const defaultTitle = title || (isPres ? "Untitled Presentation" : "Untitled Document");
+
+  return {
+    id: `doc-${now}`,
+    title: defaultTitle,
+    mode,
+    page: {
+      size: isPres ? "presentation-16-9" : "letter",
+      width: isPres ? 13.33 : 8.5,
+      height: isPres ? 7.5 : 11.0,
+      unit: "in",
+      safeMargin: 0.65,
+      background: "#ffffff",
+    },
+    theme: {
+      name: "Clean Modern",
+      headingFont: "Inter",
+      bodyFont: "Inter",
+      primaryColor: "#09090b",
+      accentColor: "#4f46e5",
+      backgroundColor: "#ffffff",
+    },
+    pages: [
+      {
+        id: `page-${now}-1`,
+        title: isPres ? "Slide 1" : "Page 1",
+        elements: [
+          {
+            id: `heading-${now}`,
+            type: "heading",
+            layoutMode: "flow",
+            x: 0.65,
+            y: 0.65,
+            width: isPres ? 12.0 : 7.2,
+            height: 1.0,
+            zIndex: 1,
+            content: {
+              title: defaultTitle,
+              subtitle: isPres
+                ? "Click to type subtitle, or add content and ask AI to organize"
+                : "Click to type subtitle or start writing below...",
+            },
+          },
+          {
+            id: `text-${now + 1}`,
+            type: "text",
+            layoutMode: "flow",
+            x: 0.65,
+            y: 1.8,
+            width: isPres ? 12.0 : 7.2,
+            height: 2.2,
+            zIndex: 2,
+            content: {
+              text: "Start typing your notes, ideas, or paste content here. You can add images or blocks anytime, and then ask the AI to move, align, or fix things!",
+            },
+          },
+        ],
+      },
+    ],
+    elements: [],
+  };
+}
+

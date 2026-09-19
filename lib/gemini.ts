@@ -23,11 +23,11 @@ export function getGeminiModelName(): string {
   if (configured && !configured.includes("2.5-pro") && !configured.includes("1.5") && !configured.includes("2.0")) {
     return configured;
   }
-  return "gemini-3.8-flash";
+  return "gemini-3.1-flash-lite";
 }
 
 export async function callGeminiWithFallback(params: {
-  contents: string;
+  contents: any;
   systemInstruction?: string;
   responseMimeType?: string;
   temperature?: number;
@@ -39,10 +39,10 @@ export async function callGeminiWithFallback(params: {
   if (configured && !configured.includes("2.5-pro") && !configured.includes("1.5") && !configured.includes("2.0")) {
     candidateModels.push(configured);
   }
-  // Fastest and most accurate modern models first
+  // Gemini 3.1 Flash-Lite is the ultra-fast multimodal workhorse
+  if (!candidateModels.includes("gemini-3.1-flash-lite")) candidateModels.push("gemini-3.1-flash-lite");
   if (!candidateModels.includes("gemini-3.8-flash")) candidateModels.push("gemini-3.8-flash");
   if (!candidateModels.includes("gemini-flash-latest")) candidateModels.push("gemini-flash-latest");
-  if (!candidateModels.includes("gemini-3.1-flash-lite")) candidateModels.push("gemini-3.1-flash-lite");
   if (!candidateModels.includes("gemini-2.5-flash")) candidateModels.push("gemini-2.5-flash");
 
   let lastError: any = null;

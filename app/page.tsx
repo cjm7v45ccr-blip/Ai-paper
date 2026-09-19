@@ -6,11 +6,18 @@ import {
   DocumentElement,
   DocumentMode,
   PageData,
+  DocumentComment,
 } from "@/types/document";
 import {
   INITIAL_SAMPLE_DOCUMENT,
   SAMPLE_PRESENTATION_DECK,
 } from "@/lib/sample-document";
+import {
+  getAllDocuments,
+  saveDocument,
+  deleteDocument,
+  duplicateDocument,
+} from "@/lib/document-storage";
 import { buildComprehensiveDocumentFromPrompt } from "@/lib/smart-layout-architect";
 import {
   turnPageIntoVisual,
@@ -21,25 +28,63 @@ import {
 import { triggerPrint } from "@/lib/print";
 import { Sparkles } from "lucide-react";
 
-import { GammaStyleHomepage } from "@/components/home/GammaStyleHomepage";
+import { GammaStyleHomepage, CreationParams } from "@/components/home/GammaStyleHomepage";
 import { GenerationSteppedScreen } from "@/components/home/GenerationSteppedScreen";
 import { MinimalTopNav } from "@/components/editor/MinimalTopNav";
+import { SmartFormattingRibbon } from "@/components/editor/SmartFormattingRibbon";
 import { MinimalLeftRail } from "@/components/editor/MinimalLeftRail";
 import { HybridDocumentCanvas } from "@/components/editor/HybridDocumentCanvas";
 import { RightInspector } from "@/components/editor/RightInspector";
 import { MinimalAiPromptBar } from "@/components/editor/MinimalAiPromptBar";
 import { PresenterModal } from "@/components/editor/PresenterModal";
 import { PrintPreviewModal } from "@/components/editor/PrintPreviewModal";
+import { FindReplaceBar } from "@/components/editor/FindReplaceBar";
+import { CommentsDrawer } from "@/components/editor/CommentsDrawer";
 
 export default function PagePilotApp() {
   // Navigation views: "home" | "generating" | "editor"
   const [currentView, setCurrentView] = useState<"home" | "generating" | "editor">("home");
+
+  // All Saved Documents State (Google Docs style persistence)
+  const [allDocuments, setAllDocuments] = useState<DocumentModel[]>([]);
 
   // Active Document State - Defaults to standard 8.5x11 inch US Letter Hybrid Document
   const [documentState, setDocumentState] = useState<DocumentModel>(INITIAL_SAMPLE_DOCUMENT);
   const [documentMode, setDocumentMode] = useState<DocumentMode>("document");
   const [activePageIndex, setActivePageIndex] = useState(0);
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
+
+  // Auto-save active document whenever it changes in editor
+  const [isInitialized, setIsInitialized] = useState(false);
+
+  // Load documents on initial client mount
+  useEffect(() => {
+    const loaded = getAllDocuments();
+    setAllDocuments(loaded);
+    if (loaded.length > 0) {
+      setDocumentState(loaded[0]);
+      setDocumentMode(loaded[0].mode || "document");
+    }
+    setIsInitialized(true);
+  }, []);
+
+  // Auto-save active document ONLY when modified in editor view
+  useEffect(() => {
+    if (!isInitialized) return;
+    if (currentView !== "editor") return;
+    if (documentState && documentState.title && documentState.id) {
+      const updated = saveDocument(documentState);
+      setAllDocuments((prev) => {
+        const idx = prev.findIndex((d) => d.id === updated.id);
+        if (idx >= 0) {
+          const clone = [...prev];
+          clone[idx] = updated;
+          return clone;
+        }
+        return [updated, ...prev];
+      });
+    }
+  }, [documentState, isInitialized, currentView]);
 
   // Canvas View & Zoom State
   const [zoom, setZoom] = useState(0.85);
@@ -59,6 +104,58 @@ export default function PagePilotApp() {
   // Presentation & Export Modals
   const [isPresenterOpen, setIsPresenterOpen] = useState(false);
   const [isPrintPreviewOpen, setIsPrintPreviewOpen] = useState(false);
+  const [isAiBarOpen, setIsAiBarOpen] = useState(false);
+  const [isInspectorCollapsed, setIsInspectorCollapsed] = useState(true);
+
+  // Comments & Find-Replace Panels State
+  const [isCommentsOpen, setIsCommentsOpen] = useState(false);
+  const [isFindOpen, setIsFindOpen] = useState(false);
+  const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
+  const [totalMatches, setTotalMatches] = useState(0);
+  const [matchedElementIds, setMatchedElementIds] = useState<string[]>([]);
+
+  // Calculate live word count and character count across all elements
+  const { wordCount, charCount } = React.useMemo(() => {
+    let words = 0;
+    let chars = 0;
+
+    const extractText = (content: any): string => {
+      if (!content) return "";
+      if (typeof content === "string") return content;
+      if (typeof content === "object") {
+        let str = "";
+        if (content.title) str += content.title + " ";
+        if (content.subtitle) str += content.subtitle + " ";
+        if (content.text) str += content.text + " ";
+        if (content.description) str += content.description + " ";
+        if (Array.isArray(content.items)) {
+          str += content.items.map((it: any) => (typeof it === "string" ? it : it.text || it.title || "")).join(" ");
+        }
+        if (Array.isArray(content.rows)) {
+          str += content.rows.map((r: any) => (Array.isArray(r) ? r.join(" ") : "")).join(" ");
+        }
+        return str;
+      }
+      return "";
+    };
+
+    const allPages = documentState.pages && documentState.pages.length > 0
+      ? documentState.pages
+      : [{ id: "p1", elements: documentState.elements || [] }];
+
+    for (const p of allPages) {
+      for (const el of p.elements || []) {
+        const text = extractText(el.content);
+        if (text) {
+          chars += text.length;
+          const w = text.trim().split(/\s+/).filter(Boolean);
+          words += w.length;
+        }
+      }
+    }
+
+    return { wordCount: words, charCount: chars };
+  }, [documentState]);
 
   // Push new state to history for undo/redo
   const pushToHistory = useCallback((newDoc: DocumentModel) => {
@@ -89,7 +186,7 @@ export default function PagePilotApp() {
     }
   }, [history, historyIndex]);
 
-  // Global Keyboard Shortcuts (⌘Z, ⌘⇧Z, ⌘P, Escape)
+  // Global Keyboard Shortcuts (⌘Z, ⌘⇧Z, ⌘P, ⌘F, Escape)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
@@ -105,8 +202,12 @@ export default function PagePilotApp() {
       } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "p") {
         e.preventDefault();
         setIsPresenterOpen(true);
+      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "f") {
+        e.preventDefault();
+        setIsFindOpen((prev) => !prev);
       } else if (e.key === "Escape") {
         setSelectedElementId(null);
+        setIsFindOpen(false);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -126,15 +227,9 @@ export default function PagePilotApp() {
         ];
 
   // 1. Initial Creation Flow Triggered from Homepage
-  const handleStartCreation = async ({
-    prompt,
-    mode,
-  }: {
-    prompt: string;
-    mode: DocumentMode;
-  }) => {
-    setActivePrompt(prompt);
-    setDocumentMode(mode);
+  const handleStartCreation = async (params: CreationParams) => {
+    setActivePrompt(params.prompt);
+    setDocumentMode(params.mode);
     setCurrentView("generating");
     setIsAiLoading(true);
 
@@ -143,9 +238,14 @@ export default function PagePilotApp() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          prompt,
+          prompt: params.prompt,
           actionType: "create_from_prompt",
-          documentMode: mode,
+          documentMode: params.mode,
+          audience: params.audience,
+          desiredLength: params.desiredLength,
+          visualTheme: params.visualTheme,
+          sourceContent: params.sourceContent,
+          referenceLinks: params.referenceLinks,
           documentState,
         }),
       });
@@ -167,7 +267,7 @@ export default function PagePilotApp() {
         const errorData = await response.json().catch(() => ({}));
         console.warn("AI generation endpoint error:", errorData);
         // Fallback for resilient offline experience
-        const fallback = buildComprehensiveDocumentFromPrompt(prompt, mode);
+        const fallback = buildComprehensiveDocumentFromPrompt(params.prompt, params.mode);
         setDocumentState(fallback);
         setHistory([fallback]);
         setHistoryIndex(0);
@@ -177,7 +277,7 @@ export default function PagePilotApp() {
       }
     } catch (err: any) {
       console.warn("AI generation network fallback:", err);
-      const fallback = buildComprehensiveDocumentFromPrompt(prompt, mode);
+      const fallback = buildComprehensiveDocumentFromPrompt(params.prompt, params.mode);
       setDocumentState(fallback);
       setHistory([fallback]);
       setHistoryIndex(0);
@@ -193,13 +293,45 @@ export default function PagePilotApp() {
   // 2. Open Existing Sample Project
   const handleOpenDraft = (mode: DocumentMode) => {
     const docToOpen = mode === "presentation" ? SAMPLE_PRESENTATION_DECK : INITIAL_SAMPLE_DOCUMENT;
-    setDocumentState(docToOpen);
+    const cloned = { ...docToOpen, id: `doc-${Date.now()}` };
+    saveDocument(cloned);
+    setDocumentState(cloned);
     setDocumentMode(mode);
-    setHistory([docToOpen]);
+    setHistory([cloned]);
     setHistoryIndex(0);
     setActivePageIndex(0);
     setSelectedElementId(null);
     setCurrentView("editor");
+  };
+
+  // Open Document from Saved Documents List
+  const handleOpenExistingDocument = (doc: DocumentModel) => {
+    setDocumentState(doc);
+    setDocumentMode(doc.mode || "document");
+    setHistory([doc]);
+    setHistoryIndex(0);
+    setActivePageIndex(0);
+    setSelectedElementId(null);
+    setCurrentView("editor");
+  };
+
+  // Delete Document from Saved Documents List
+  const handleDeleteDocumentFromList = (docId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const updated = deleteDocument(docId);
+    setAllDocuments(updated);
+    if (documentState.id === docId && updated.length > 0) {
+      setDocumentState(updated[0]);
+    }
+  };
+
+  // Duplicate Document from Saved Documents List
+  const handleDuplicateDocumentFromList = (docId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const newDoc = duplicateDocument(docId);
+    if (newDoc) {
+      setAllDocuments(getAllDocuments());
+    }
   };
 
   // 3. Page / Slide Management
@@ -505,28 +637,98 @@ export default function PagePilotApp() {
     });
   };
 
-  const handleAddBlock = (type: "text" | "callout" | "formula" | "table" | "chart" | "checkboxGroup") => {
+  const handleAddBlock = (type: any) => {
     const page = currentPages[activePageIndex];
     if (!page) return;
 
     let newElement: DocumentElement;
     const now = Date.now();
 
-    if (type === "formula") {
+    if (type === "card") {
+      newElement = {
+        id: `card-${now}`,
+        type: "card",
+        x: 0.65,
+        y: 2.5,
+        width: 7.2,
+        height: 2.2,
+        zIndex: 2,
+        content: {
+          title: "Core Strategic Pillars",
+          cards: [
+            { badge: "01", title: "Smart Architecture", description: "Modular semantic blocks engineered for print and presentation.", highlight: true },
+            { badge: "02", title: "Sub-Millimeter Snap", description: "Precision guidelines, dot grids, and collision prevention.", highlight: false },
+            { badge: "03", title: "Apple Typography", description: "Curated mathematical ratios and high-contrast styling.", highlight: false },
+          ],
+        },
+      };
+    } else if (type === "metric") {
+      newElement = {
+        id: `metric-${now}`,
+        type: "metric",
+        x: 0.65,
+        y: 2.5,
+        width: 7.2,
+        height: 1.8,
+        zIndex: 2,
+        content: {
+          title: "Executive Performance Metrics",
+          metrics: [
+            { value: "99.4%", label: "Accuracy Rate", change: "+4.8%", isPositive: true },
+            { value: "$3.8M", label: "ARR Projected", change: "+42%", isPositive: true },
+            { value: "<15ms", label: "Render Latency", change: "-58%", isPositive: true },
+          ],
+        },
+      };
+    } else if (type === "timeline") {
+      newElement = {
+        id: `timeline-${now}`,
+        type: "timeline",
+        x: 0.65,
+        y: 2.5,
+        width: 7.2,
+        height: 2.0,
+        zIndex: 2,
+        content: {
+          title: "Milestone Execution Roadmap",
+          events: [
+            { phase: "Phase 1", title: "Architecture & Math", status: "completed", desc: "Core grid engine with sub-pixel snap" },
+            { phase: "Phase 2", title: "AI Generation", status: "in-progress", desc: "Gamma-grade layout transformations" },
+            { phase: "Phase 3", title: "Production Deploy", status: "planned", desc: "Real-time exports and live presentation" },
+          ],
+        },
+      };
+    } else if (type === "heading") {
+      newElement = {
+        id: `heading-${now}`,
+        type: "heading",
+        x: 0.65,
+        y: 1.0,
+        width: 7.2,
+        height: 1.2,
+        zIndex: 2,
+        content: {
+          title: "Executive Strategic Overview",
+          subtitle: "Clear direction, actionable insights, and structured milestones.",
+          badge: "STRATEGY",
+        },
+      };
+    } else if (type === "formula") {
       newElement = {
         id: `formula-${now}`,
         type: "formula",
-        x: 1,
+        x: 0.65,
         y: 3,
-        width: 5,
+        width: 5.5,
         height: 2,
         zIndex: 2,
         content: {
-          title: "Model Formulation",
-          equation: "\\mathcal{L}(\\theta) = \\mathbb{E}_{x \\sim p}[-\\log p_\\theta(x)]",
+          title: "Mathematical Optimization Formulation",
+          equation: "\\mathcal{L}(\\theta) = \\mathbb{E}_{x \\sim p}[-\\log p_\\theta(x)] + \\lambda \\|\\theta\\|^2",
           breakdown: [
-            { symbol: "\\mathcal{L}", label: "Objective Loss" },
-            { symbol: "\\theta", label: "Model Parameters" },
+            { symbol: "\\mathcal{L}", label: "Total Loss Objective" },
+            { symbol: "\\theta", label: "Model Weight Parameters" },
+            { symbol: "\\lambda", label: "Regularization Coefficient" },
           ],
         },
       };
@@ -534,31 +736,50 @@ export default function PagePilotApp() {
       newElement = {
         id: `callout-${now}`,
         type: "callout",
-        x: 1,
+        x: 0.65,
         y: 3,
-        width: 5,
+        width: 7.2,
         height: 1.8,
         zIndex: 2,
         content: {
-          title: "Strategic Takeaway",
-          text: "Highlight critical observations or guidelines with high visual emphasis.",
+          title: "Strategic Key Finding",
+          text: "Accelerating execution cycle time while preserving strict margin boundaries yields higher editorial impact.",
         },
       };
     } else if (type === "table") {
       newElement = {
         id: `table-${now}`,
         type: "table",
-        x: 1,
+        x: 0.65,
         y: 3,
-        width: 6,
-        height: 2,
+        width: 7.2,
+        height: 2.2,
         zIndex: 2,
         content: {
-          title: "Evaluation Metrics",
-          headers: ["Phase", "Milestone", "Status"],
+          title: "Quarterly Evaluation Matrix",
+          headers: ["Initiative", "Owner", "Target Date", "Status"],
           rows: [
-            ["Phase 1", "Core Synthesis & KaTeX Math", "Complete"],
-            ["Phase 2", "Multi-Agent Orchestration", "In Progress"],
+            ["Sub-Millimeter Snap", "Engineering", "Q1 2026", "Shipped"],
+            ["AI Transformation Engine", "Design Team", "Q2 2026", "In Progress"],
+            ["Enterprise PDF Export", "Core Platform", "Q3 2026", "Active"],
+          ],
+        },
+      };
+    } else if (type === "chart") {
+      newElement = {
+        id: `chart-${now}`,
+        type: "chart",
+        x: 0.65,
+        y: 3,
+        width: 7.2,
+        height: 2.5,
+        zIndex: 2,
+        content: {
+          title: "Quarterly Growth Velocity",
+          labels: ["Q1", "Q2", "Q3", "Q4"],
+          series: [
+            { name: "Active Users (k)", color: "#4f46e5", values: [120, 240, 480, 890] },
+            { name: "Documents Created (k)", color: "#10b981", values: [80, 180, 390, 720] },
           ],
         },
       };
@@ -566,31 +787,42 @@ export default function PagePilotApp() {
       newElement = {
         id: `checklist-${now}`,
         type: "checkboxGroup",
-        x: 1,
+        x: 0.65,
         y: 3,
-        width: 5,
+        width: 7.2,
         height: 2,
         zIndex: 2,
         content: {
-          title: "Execution Checklist",
+          title: "Pre-Launch Review Checklist",
           items: [
-            { text: "Verify typography hierarchy & contrast.", checked: true },
-            { text: "Confirm safe printing margin boundaries.", checked: false },
+            { text: "Verify typography hierarchy & contrast ratios.", checked: true },
+            { text: "Confirm safe printing margin boundaries (0.65\").", checked: true },
+            { text: "Validate snap guidelines and alignment accuracy.", checked: false },
           ],
         },
+      };
+    } else if (type === "divider") {
+      newElement = {
+        id: `divider-${now}`,
+        type: "divider",
+        x: 0.65,
+        y: 3,
+        width: 7.2,
+        height: 0.3,
+        zIndex: 1,
+        content: {},
       };
     } else {
       newElement = {
         id: `text-${now}`,
-        type: "text",
-        x: 1,
+        type: "richText",
+        x: 0.65,
         y: 3,
-        width: 5,
+        width: 7.2,
         height: 1.5,
         zIndex: 2,
         content: {
-          title: "New Section",
-          text: "Write your analysis, background narrative, or recommendations.",
+          text: "PagePilot combines structured document flow with absolute layout precision, empowering teams to create high-craft presentations and reports.",
         },
       };
     }
@@ -607,6 +839,70 @@ export default function PagePilotApp() {
       elements: updatedPages[activePageIndex].elements,
     });
     setSelectedElementId(newElement.id);
+  };
+
+  const handleApplyThemePreset = (themeName: string) => {
+    const THEME_MAP: Record<string, NonNullable<DocumentModel["theme"]>> = {
+      "Minimalist Titanium": {
+        name: "Minimalist Titanium",
+        headingFont: "Inter",
+        bodyFont: "Inter",
+        primaryColor: "#09090b",
+        accentColor: "#4f46e5",
+        backgroundColor: "#ffffff",
+      },
+      "Silicon Valley Tech": {
+        name: "Silicon Valley Tech",
+        headingFont: "Plus Jakarta Sans",
+        bodyFont: "Inter",
+        primaryColor: "#0f172a",
+        accentColor: "#2563eb",
+        backgroundColor: "#f8fafc",
+      },
+      "Editorial Broadside": {
+        name: "Editorial Broadside",
+        headingFont: "Playfair Display",
+        bodyFont: "Merriweather",
+        primaryColor: "#1c1917",
+        accentColor: "#9a3412",
+        backgroundColor: "#fdfbf7",
+      },
+      "Emerald Executive": {
+        name: "Emerald Executive",
+        headingFont: "Outfit",
+        bodyFont: "DM Sans",
+        primaryColor: "#064e3b",
+        accentColor: "#059669",
+        backgroundColor: "#f0fdf4",
+      },
+      "Monochrome Swiss": {
+        name: "Monochrome Swiss",
+        headingFont: "Space Grotesk",
+        bodyFont: "Inter",
+        primaryColor: "#000000",
+        accentColor: "#52525b",
+        backgroundColor: "#ffffff",
+      },
+      "Obsidian Night": {
+        name: "Obsidian Night",
+        headingFont: "Outfit",
+        bodyFont: "Inter",
+        primaryColor: "#fafafa",
+        accentColor: "#818cf8",
+        backgroundColor: "#0f172a",
+      },
+    };
+
+    const targetTheme = THEME_MAP[themeName];
+    if (targetTheme) {
+      const updated: DocumentModel = {
+        ...documentState,
+        theme: targetTheme,
+      };
+      pushToHistory(updated);
+      setStatusMessage(`Applied theme: ${themeName}`);
+      setTimeout(() => setStatusMessage(null), 3000);
+    }
   };
 
   // 5. AI Prompt Bar & Refinements
@@ -650,22 +946,237 @@ export default function PagePilotApp() {
 
   const handleAiRefineElement = (id: string, actionType: string) => {
     setSelectedElementId(id);
-    const command =
-      actionType === "concise"
-        ? "Make this more concise"
-        : actionType === "professional"
-        ? "Use a more professional tone"
-        : "Refine and polish this content";
+    let command = "Refine and polish this element";
+    if (actionType === "card_grid") {
+      command = "Transform this element into a 3-column feature comparison card grid with concise bullet points and category badges";
+    } else if (actionType === "stat_metric") {
+      command = "Transform this element into high-impact KPI stat metric cards with large bold numbers, labels, and delta percentage changes";
+    } else if (actionType === "timeline") {
+      command = "Transform this element into a chronological roadmap timeline with phase badges and milestones";
+    } else if (actionType === "fix_grammar") {
+      command = "Fix all spelling, grammar, and typography flaws in this element";
+    } else if (actionType === "concise") {
+      command = "Make this element ultra concise, punchy, and impactful";
+    } else if (actionType === "professional") {
+      command = "Polish this element with an executive, high-stakes presentation tone";
+    }
     handleAiPromptSubmit(command);
   };
 
-  // 6. Regenerate Complete First Draft
-  const handleRegenerateDraft = () => {
-    const promptToUse = activePrompt || documentState.title || "Executive Strategy Presentation";
-    handleStartCreation({ prompt: promptToUse, mode: documentMode });
+  // 6. Mode Transformation Engine (Unified Workspace Doc <-> Slide <-> Report)
+  const handleTransformDocumentMode = async (targetMode: DocumentMode) => {
+    setIsAiLoading(true);
+    setStatusMessage(`Transforming project to ${targetMode}...`);
+    try {
+      const response = await fetch("/api/gemini", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          actionType: "transform_document_mode",
+          documentMode: targetMode,
+          documentState,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.document) {
+          setDocumentMode(targetMode);
+          pushToHistory({
+            ...data.document,
+            mode: targetMode,
+          });
+          setStatusMessage(data.message || `Transformed to ${targetMode}`);
+          setTimeout(() => setStatusMessage(null), 3000);
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn("Transform API fallback:", e);
+    } finally {
+      setIsAiLoading(false);
+    }
+
+    // Fallback offline transformation
+    setDocumentMode(targetMode);
+    const updatedPages = currentPages.map((p) => {
+      if (targetMode === "presentation") {
+        return turnPageIntoVisual(p);
+      } else if (targetMode === "document") {
+        return turnPageIntoDocumentFlow(p);
+      } else {
+        return { ...p, layoutType: targetMode };
+      }
+    });
+
+    pushToHistory({
+      ...documentState,
+      mode: targetMode,
+      pages: updatedPages,
+    });
+    setStatusMessage(`Transformed layout to ${targetMode}`);
+    setTimeout(() => setStatusMessage(null), 3000);
   };
 
-  // 7. Export Handlers
+  // 7. Comments Management Handlers
+  const handleAddComment = (text: string, elementId?: string) => {
+    const newComment: DocumentComment = {
+      id: `comment-${Date.now()}`,
+      elementId: elementId || undefined,
+      author: "Editor",
+      text,
+      createdAt: new Date().toISOString(),
+      resolved: false,
+    };
+    const updatedComments = [...(documentState.comments || []), newComment];
+    pushToHistory({
+      ...documentState,
+      comments: updatedComments,
+    });
+  };
+
+  const handleResolveComment = (id: string) => {
+    const updatedComments = (documentState.comments || []).map((c) =>
+      c.id === id ? { ...c, resolved: !c.resolved } : c
+    );
+    pushToHistory({
+      ...documentState,
+      comments: updatedComments,
+    });
+  };
+
+  const handleDeleteComment = (id: string) => {
+    const updatedComments = (documentState.comments || []).filter((c) => c.id !== id);
+    pushToHistory({
+      ...documentState,
+      comments: updatedComments,
+    });
+  };
+
+  // 8. Find & Replace Handlers
+  const handleFind = useCallback((searchTerm: string, matchCase: boolean) => {
+    if (!searchTerm.trim()) {
+      setTotalMatches(0);
+      setCurrentMatchIndex(0);
+      setMatchedElementIds([]);
+      return;
+    }
+
+    const ids: string[] = [];
+    const query = matchCase ? searchTerm : searchTerm.toLowerCase();
+
+    for (const page of currentPages) {
+      for (const el of page.elements) {
+        const contentStr = typeof el.content === "string" ? el.content : JSON.stringify(el.content || {});
+        const target = matchCase ? contentStr : contentStr.toLowerCase();
+        if (target.includes(query)) {
+          ids.push(el.id);
+        }
+      }
+    }
+
+    setMatchedElementIds(ids);
+    setTotalMatches(ids.length);
+    setCurrentMatchIndex(ids.length > 0 ? 0 : -1);
+    if (ids.length > 0) {
+      setSelectedElementId(ids[0]);
+    }
+  }, [currentPages]);
+
+  const handleNextMatch = () => {
+    if (matchedElementIds.length === 0) return;
+    const nextIdx = (currentMatchIndex + 1) % matchedElementIds.length;
+    setCurrentMatchIndex(nextIdx);
+    setSelectedElementId(matchedElementIds[nextIdx]);
+  };
+
+  const handlePrevMatch = () => {
+    if (matchedElementIds.length === 0) return;
+    const prevIdx = (currentMatchIndex - 1 + matchedElementIds.length) % matchedElementIds.length;
+    setCurrentMatchIndex(prevIdx);
+    setSelectedElementId(matchedElementIds[prevIdx]);
+  };
+
+  const handleReplace = (searchTerm: string, replaceTerm: string, matchCase: boolean) => {
+    if (!selectedElementId || !searchTerm) return;
+    const page = currentPages[activePageIndex];
+    if (!page) return;
+
+    const replaceInContent = (content: any): any => {
+      if (typeof content === "string") {
+        const flags = matchCase ? "g" : "gi";
+        return content.replace(new RegExp(searchTerm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), flags), replaceTerm);
+      }
+      if (content && typeof content === "object") {
+        const clone = { ...content };
+        for (const key of Object.keys(clone)) {
+          clone[key] = replaceInContent(clone[key]);
+        }
+        return clone;
+      }
+      return content;
+    };
+
+    const updatedElements = page.elements.map((el) => {
+      if (el.id === selectedElementId) {
+        return { ...el, content: replaceInContent(el.content) };
+      }
+      return el;
+    });
+
+    const updatedPages = [...currentPages];
+    updatedPages[activePageIndex] = { ...page, elements: updatedElements };
+    pushToHistory({
+      ...documentState,
+      pages: updatedPages,
+      elements: updatedElements,
+    });
+  };
+
+  const handleReplaceAll = (searchTerm: string, replaceTerm: string, matchCase: boolean) => {
+    if (!searchTerm) return;
+
+    const replaceInContent = (content: any): any => {
+      if (typeof content === "string") {
+        const flags = matchCase ? "g" : "gi";
+        return content.replace(new RegExp(searchTerm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), flags), replaceTerm);
+      }
+      if (content && typeof content === "object") {
+        const clone = { ...content };
+        for (const key of Object.keys(clone)) {
+          clone[key] = replaceInContent(clone[key]);
+        }
+        return clone;
+      }
+      return content;
+    };
+
+    const updatedPages = currentPages.map((page) => ({
+      ...page,
+      elements: page.elements.map((el) => ({
+        ...el,
+        content: replaceInContent(el.content),
+      })),
+    }));
+
+    pushToHistory({
+      ...documentState,
+      pages: updatedPages,
+    });
+    setStatusMessage("Replaced all occurrences");
+    setTimeout(() => setStatusMessage(null), 3000);
+  };
+
+  // 9. Regenerate Complete First Draft
+  const handleRegenerateDraft = () => {
+    const promptToUse = activePrompt || documentState.title || "Executive Strategy Presentation";
+    handleStartCreation({
+      prompt: promptToUse,
+      mode: documentMode,
+    });
+  };
+
+  // 10. Export Handlers
   const handleExport = (format: "pdf" | "png" | "json" | "markdown") => {
     if (format === "pdf") {
       setIsPrintPreviewOpen(true);
@@ -707,8 +1218,12 @@ export default function PagePilotApp() {
   if (currentView === "home") {
     return (
       <GammaStyleHomepage
+        documents={allDocuments}
         onStartCreation={handleStartCreation}
         onOpenDraft={handleOpenDraft}
+        onOpenDocument={handleOpenExistingDocument}
+        onDeleteDocument={handleDeleteDocumentFromList}
+        onDuplicateDocument={handleDuplicateDocumentFromList}
       />
     );
   }
@@ -737,6 +1252,7 @@ export default function PagePilotApp() {
           setDocumentMode(newMode);
           pushToHistory({ ...documentState, mode: newMode });
         }}
+        onTransformMode={handleTransformDocumentMode}
         canUndo={historyIndex > 0}
         canRedo={historyIndex < history.length - 1}
         onUndo={handleUndo}
@@ -752,9 +1268,60 @@ export default function PagePilotApp() {
         onToggleViewMode={() =>
           setViewMode((prev) => (prev === "stacked" ? "single" : "stacked"))
         }
+        isAiBarOpen={isAiBarOpen}
+        onToggleAiBar={() => setIsAiBarOpen((prev) => !prev)}
+        isInspectorCollapsed={isInspectorCollapsed}
+        onToggleInspector={() => setIsInspectorCollapsed((prev) => !prev)}
+        wordCount={wordCount}
+        charCount={charCount}
+        commentsCount={documentState.comments?.filter((c) => !c.resolved).length || 0}
+        isCommentsOpen={isCommentsOpen}
+        onToggleComments={() => setIsCommentsOpen((prev) => !prev)}
+        isFindOpen={isFindOpen}
+        onToggleFind={() => setIsFindOpen((prev) => !prev)}
       />
 
-      {/* 2. Main Workspace Layout */}
+      {/* 2. Apple / Google Docs & Slides Grade Smart Formatting Ribbon */}
+      <SmartFormattingRibbon
+        document={documentState}
+        selectedElement={
+          currentPages[activePageIndex]?.elements.find(
+            (el) => el.id === selectedElementId
+          ) || null
+        }
+        onUpdateElement={(id, changes) => {
+          const page = currentPages[activePageIndex];
+          if (!page) return;
+          const updatedElements = page.elements.map((el) =>
+            el.id === id ? { ...el, ...changes } : el
+          );
+          const updatedPages = [...currentPages];
+          updatedPages[activePageIndex] = { ...page, elements: updatedElements };
+          pushToHistory({
+            ...documentState,
+            pages: updatedPages,
+            elements: updatedElements,
+          });
+        }}
+        onUpdateElementStyle={(id, styleUpdates) => {
+          handleUpdateElementStyle(id, styleUpdates);
+        }}
+        onAddBlock={handleAddBlock}
+        onDuplicateElement={(id) => {
+          handleDuplicateElement(id);
+        }}
+        onDeleteElement={(id) => {
+          handleDeleteElement(id);
+        }}
+        onAiRefineElement={(id, actionType) => {
+          handleAiRefineElement(id, actionType);
+        }}
+        onApplyThemePreset={handleApplyThemePreset}
+        documentMode={documentMode}
+        isAiLoading={isAiLoading}
+      />
+
+      {/* 3. Main Workspace Layout */}
       <div className="flex-1 flex overflow-hidden relative">
         {/* Subtle Left Navigation Rail */}
         <MinimalLeftRail
@@ -838,8 +1405,34 @@ export default function PagePilotApp() {
           onToggleBW={() => setIsBlackAndWhite((prev) => !prev)}
           onTriggerAIModification={handleAiRefineElement}
           onTransformPage={handleTransformPage}
+          isCollapsed={isInspectorCollapsed}
+          onToggleCollapsed={setIsInspectorCollapsed}
+        />
+
+        {/* Floating Comments & Review Drawer */}
+        <CommentsDrawer
+          isOpen={isCommentsOpen}
+          onClose={() => setIsCommentsOpen(false)}
+          comments={documentState.comments || []}
+          activeElementId={selectedElementId}
+          onAddComment={handleAddComment}
+          onResolveComment={handleResolveComment}
+          onDeleteComment={handleDeleteComment}
         />
       </div>
+
+      {/* Floating Find & Replace Bar */}
+      <FindReplaceBar
+        isOpen={isFindOpen}
+        onClose={() => setIsFindOpen(false)}
+        onFind={handleFind}
+        onReplace={handleReplace}
+        onReplaceAll={handleReplaceAll}
+        totalMatches={totalMatches}
+        currentMatchIndex={currentMatchIndex}
+        onNextMatch={handleNextMatch}
+        onPrevMatch={handlePrevMatch}
+      />
 
       {/* Real-time AI Status Notification */}
       {statusMessage && (
@@ -849,10 +1442,12 @@ export default function PagePilotApp() {
         </div>
       )}
 
-      {/* 3. Floating Bottom AI Prompt Bar */}
+      {/* 3. Floating Bottom AI Prompt Bar - Dockable & Non-intrusive */}
       <MinimalAiPromptBar
         onSubmitPrompt={handleAiPromptSubmit}
         isLoading={isAiLoading}
+        isOpen={isAiBarOpen}
+        onToggleOpen={setIsAiBarOpen}
       />
 
       {/* 4. Fullscreen Presenter Modal */}

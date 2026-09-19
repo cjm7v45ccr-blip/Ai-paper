@@ -2,8 +2,12 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "PagePilot — Professional AI Document & Slide Workspace",
-  description: "Professional AI document & slide creation workspace with KaTeX math and layout intelligence",
+  title: "PagePilot",
+  description: "Hybrid workspace combining the flexibility of a document editor with the visual quality of an AI presentation tool on 8.5x11 inch pages.",
+  openGraph: {
+    title: "PagePilot",
+    description: "Hybrid workspace combining the flexibility of a document editor with the visual quality of an AI presentation tool on 8.5x11 inch pages.",
+  },
 };
 
 export default function RootLayout({

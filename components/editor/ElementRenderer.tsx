@@ -2,7 +2,22 @@
 
 import React, { useRef, useState, useEffect } from "react";
 import { DocumentElement } from "@/types/document";
-import { AlertCircle, CheckSquare, Square, FileText, Sigma, Check } from "lucide-react";
+import {
+  AlertCircle,
+  CheckSquare,
+  Square,
+  FileText,
+  Sigma,
+  Check,
+  TrendingUp,
+  TrendingDown,
+  Clock,
+  Sparkles,
+  Layers,
+  Columns3,
+  Upload,
+  Image as ImageIcon,
+} from "lucide-react";
 import { MathRenderer, MarkdownWithMath, parseInlineFormatting } from "@/lib/math-markdown-engine";
 
 interface ElementRendererProps {
@@ -12,6 +27,7 @@ interface ElementRendererProps {
   isBlackAndWhite?: boolean;
   isPreview?: boolean;
   isPresentation?: boolean;
+  onUpdateContent?: (newContent: any, newMetadata?: any) => void;
 }
 
 export const ElementRenderer: React.FC<ElementRendererProps> = ({
@@ -21,10 +37,13 @@ export const ElementRenderer: React.FC<ElementRendererProps> = ({
   isBlackAndWhite = false,
   isPreview = false,
   isPresentation = false,
+  onUpdateContent,
 }) => {
   const { type, content, style = {} } = element;
   const containerRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [hasOverflow, setHasOverflow] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
 
   const bwStyleFilter = isBlackAndWhite ? "grayscale(100%) contrast(115%)" : "none";
 
@@ -404,6 +423,174 @@ export const ElementRenderer: React.FC<ElementRendererProps> = ({
         );
       }
 
+      case "card": {
+        const title = content?.title || "Feature Overview";
+        const cards: Array<{
+          badge?: string;
+          title: string;
+          description: string;
+          highlight?: boolean;
+        }> = content?.cards || [
+          { badge: "01", title: "Smart Architecture", description: "Modular semantic blocks engineered for print and presentation.", highlight: true },
+          { badge: "02", title: "Sub-Millimeter Snap", description: "Precision guidelines, dot grids, and collision prevention.", highlight: false },
+          { badge: "03", title: "Apple Typography", description: "Curated mathematical ratios and high-contrast styling.", highlight: false },
+        ];
+
+        return (
+          <div className="w-full h-full flex flex-col justify-between overflow-hidden p-1">
+            {title && (
+              <div
+                className="font-bold tracking-tight mb-2 shrink-0"
+                style={{
+                  fontSize: `${style.fontSize || 16}px`,
+                  color: style.color || "#09090b",
+                  fontFamily: style.fontFamily || "inherit",
+                }}
+              >
+                {parseInlineFormatting(title)}
+              </div>
+            )}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 flex-1 items-stretch min-h-0">
+              {cards.map((card, idx) => (
+                <div
+                  key={idx}
+                  className={`p-2.5 rounded-lg border transition-all flex flex-col justify-between overflow-hidden shadow-2xs ${
+                    card.highlight
+                      ? "bg-indigo-50/70 border-indigo-200 text-indigo-950"
+                      : "bg-white border-zinc-200 text-zinc-900"
+                  }`}
+                >
+                  <div>
+                    {card.badge && (
+                      <span className="inline-block text-[9px] font-mono font-bold tracking-wider px-1.5 py-0.5 rounded bg-zinc-100 border border-zinc-200 text-zinc-700 uppercase mb-1.5">
+                        {card.badge}
+                      </span>
+                    )}
+                    <h4 className="text-xs font-bold tracking-tight line-clamp-1 mb-1">
+                      {parseInlineFormatting(card.title)}
+                    </h4>
+                    <p className="text-[11px] text-zinc-600 leading-snug break-words line-clamp-3">
+                      {parseInlineFormatting(card.description)}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      }
+
+      case "metric": {
+        const title = content?.title || "Key Performance Metric";
+        const metrics: Array<{
+          value: string;
+          label: string;
+          change?: string;
+          isPositive?: boolean;
+        }> = content?.metrics || [
+          { value: "98.4%", label: "Accuracy Ratio", change: "+4.2%", isPositive: true },
+          { value: "$2.4M", label: "Annual Run Rate", change: "+38%", isPositive: true },
+          { value: "<12ms", label: "Render Latency", change: "-65%", isPositive: true },
+        ];
+
+        return (
+          <div className="w-full h-full flex flex-col justify-between overflow-hidden p-1">
+            {title && (
+              <div className="text-xs font-semibold text-zinc-900 mb-1.5 shrink-0">
+                {parseInlineFormatting(title)}
+              </div>
+            )}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 flex-1 items-stretch min-h-0">
+              {metrics.map((m, idx) => (
+                <div
+                  key={idx}
+                  className="bg-white border border-zinc-200 rounded-lg p-2.5 flex flex-col justify-between shadow-2xs overflow-hidden"
+                >
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-[10px] text-zinc-500 font-medium truncate uppercase tracking-wider">
+                      {m.label}
+                    </span>
+                    {m.change && (
+                      <span
+                        className={`text-[9px] font-mono font-bold px-1 py-0.5 rounded flex items-center gap-0.5 ${
+                          m.isPositive
+                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                            : "bg-rose-50 text-rose-700 border border-rose-200"
+                        }`}
+                      >
+                        {m.isPositive ? <TrendingUp className="w-2.5 h-2.5" /> : <TrendingDown className="w-2.5 h-2.5" />}
+                        {m.change}
+                      </span>
+                    )}
+                  </div>
+                  <div
+                    className="text-xl font-black tracking-tight text-zinc-900 mt-1"
+                    style={{ fontFamily: style.fontFamily || "Inter, sans-serif" }}
+                  >
+                    {m.value}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      }
+
+      case "timeline": {
+        const title = content?.title || "Strategic Roadmap";
+        const events: Array<{
+          phase: string;
+          title: string;
+          status?: "completed" | "in-progress" | "planned";
+          desc?: string;
+        }> = content?.events || [
+          { phase: "Q1", title: "Foundation", status: "completed", desc: "Core spatial grid & engine" },
+          { phase: "Q2", title: "AI Generation", status: "completed", desc: "Gamma-style smart remixing" },
+          { phase: "Q3", title: "Workspace Integration", status: "in-progress", desc: "Google Docs & Slides fidelity" },
+        ];
+
+        return (
+          <div className="w-full h-full flex flex-col justify-between overflow-hidden p-1">
+            <div className="text-xs font-semibold text-zinc-900 shrink-0 pb-1 border-b border-zinc-200 mb-1">
+              {parseInlineFormatting(title)}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 flex-1 items-stretch min-h-0">
+              {events.map((ev, idx) => (
+                <div
+                  key={idx}
+                  className="bg-white border border-zinc-200 rounded-lg p-2.5 flex flex-col justify-between shadow-2xs relative"
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[9px] font-mono font-bold uppercase px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-700 border border-zinc-200">
+                      {ev.phase}
+                    </span>
+                    <span
+                      className={`w-2 h-2 rounded-full ${
+                        ev.status === "completed"
+                          ? "bg-emerald-500"
+                          : ev.status === "in-progress"
+                          ? "bg-indigo-500 animate-pulse"
+                          : "bg-zinc-300"
+                      }`}
+                    />
+                  </div>
+                  <div>
+                    <h5 className="text-xs font-bold text-zinc-900 truncate mb-0.5">
+                      {parseInlineFormatting(ev.title)}
+                    </h5>
+                    {ev.desc && (
+                      <p className="text-[10px] text-zinc-500 leading-snug line-clamp-2">
+                        {parseInlineFormatting(ev.desc)}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      }
+
       case "divider": {
         return (
           <div className="w-full h-full flex items-center justify-center">
@@ -417,7 +604,8 @@ export const ElementRenderer: React.FC<ElementRendererProps> = ({
       case "imagePlaceholder": {
         const url = content?.url;
         const svgCode = content?.svg;
-        const caption = content?.caption || "Illustration";
+        const caption = content?.caption || "Image";
+        const tag = content?.tag || element.metadata?.badge || "IMAGE";
 
         if (svgCode) {
           return (
@@ -428,19 +616,113 @@ export const ElementRenderer: React.FC<ElementRendererProps> = ({
           );
         }
 
+        const handleFileSelect = (file: File) => {
+          if (!file || !file.type.startsWith("image/")) return;
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const dataUrl = e.target?.result as string;
+            if (dataUrl && onUpdateContent) {
+              const fileNameClean = file.name.replace(/\.[^/.]+$/, "").replace(/[-_]+/g, " ");
+              onUpdateContent(
+                {
+                  ...content,
+                  url: dataUrl,
+                  caption: fileNameClean,
+                  tag: "UPLOADED",
+                },
+                {
+                  ...element.metadata,
+                  semanticName: file.name,
+                  altText: fileNameClean,
+                  description: `Uploaded image: ${fileNameClean}`,
+                }
+              );
+            }
+          };
+          reader.readAsDataURL(file);
+        };
+
         return (
-          <div className="w-full h-full flex flex-col items-center justify-center overflow-hidden bg-zinc-50 rounded border border-zinc-200 p-2">
+          <div
+            onDragOver={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setIsDragOver(true);
+            }}
+            onDragLeave={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setIsDragOver(false);
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setIsDragOver(false);
+              const files = e.dataTransfer.files;
+              if (files && files.length > 0) {
+                handleFileSelect(files[0]);
+              }
+            }}
+            className={`w-full h-full flex flex-col items-center justify-center overflow-hidden rounded-lg border relative group/img transition-all ${
+              isDragOver
+                ? "bg-indigo-50 border-indigo-500 ring-2 ring-indigo-400"
+                : "bg-zinc-100/90 border-zinc-200 hover:border-zinc-300"
+            }`}
+          >
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files && e.target.files.length > 0) {
+                  handleFileSelect(e.target.files[0]);
+                }
+              }}
+            />
+
             {url ? (
-              <img
-                src={url}
-                alt={caption}
-                className="w-full h-full object-contain pointer-events-none"
-              />
+              <div className="relative w-full h-full flex flex-col items-center justify-center overflow-hidden">
+                <img
+                  src={url}
+                  alt={caption}
+                  className="w-full h-full object-cover rounded-md pointer-events-none"
+                />
+                {/* Image Tag Badge */}
+                {tag && (
+                  <div className="absolute top-1.5 left-2 bg-black/70 backdrop-blur-xs text-white text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded shadow-xs pointer-events-none">
+                    {tag}
+                  </div>
+                )}
+                {/* Replace Image Overlay Button */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    fileInputRef.current?.click();
+                  }}
+                  className="absolute top-1.5 right-2 bg-black/75 hover:bg-black backdrop-blur-xs text-white text-[10px] font-medium px-2 py-1 rounded shadow-md opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center gap-1 cursor-pointer"
+                >
+                  <Upload className="w-3 h-3" />
+                  <span>Replace</span>
+                </button>
+                {/* Image Caption */}
+                {caption && (
+                  <div className="absolute bottom-1.5 left-2 right-2 bg-black/65 backdrop-blur-xs text-white text-[10px] px-2 py-0.5 rounded-md text-center truncate pointer-events-none">
+                    {caption}
+                  </div>
+                )}
+              </div>
             ) : (
-              <div className="flex flex-col items-center text-zinc-400 text-center">
-                <FileText className="w-5 h-5 mb-1 text-zinc-400" />
-                <span className="text-xs font-medium text-zinc-700">{caption}</span>
-                <span className="text-[10px] text-zinc-400">Vector Element</span>
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                className="flex flex-col items-center justify-center text-zinc-400 text-center p-3 cursor-pointer w-full h-full hover:bg-zinc-200/50 transition-colors"
+              >
+                <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-2xs mb-1.5 border border-zinc-200 text-indigo-600">
+                  <Upload className="w-4 h-4" />
+                </div>
+                <span className="text-xs font-semibold text-zinc-700">{caption}</span>
+                <span className="text-[10px] font-mono text-zinc-500 mt-0.5">Click or drop image to upload</span>
               </div>
             )}
           </div>
@@ -456,10 +738,14 @@ export const ElementRenderer: React.FC<ElementRendererProps> = ({
             className="w-full h-full overflow-hidden leading-relaxed"
             style={{
               fontSize: `${style.fontSize || 13}px`,
+              fontWeight: style.fontWeight || "normal",
+              fontStyle: style.fontStyle || "normal",
+              textDecoration: style.textDecoration || "none",
               color: style.color || "#27272a",
               textAlign: style.textAlign || "left",
               lineHeight: style.lineHeight || 1.5,
               fontFamily: style.fontFamily || "Inter, sans-serif",
+              letterSpacing: style.letterSpacing ? `${style.letterSpacing}px` : undefined,
             }}
           >
             <MarkdownWithMath content={textContent} />

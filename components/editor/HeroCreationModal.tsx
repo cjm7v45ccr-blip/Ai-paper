@@ -61,8 +61,8 @@ const INSPIRATION_PROMPTS: InspirationPrompt[] = [
   },
   {
     title: "Q3 SaaS Infrastructure Strategy",
-    category: "One-Pager",
-    mode: "one-pager",
+    category: "Executive Report",
+    mode: "report",
     prompt: "A polished strategic executive brief on cloud migration: Capex allocation, Kafka partitioning metrics, query latency SLAs, and leadership sign-off criteria.",
     icon: TrendingUp,
     badge: "Executive Brief",
@@ -192,15 +192,15 @@ export const HeroCreationModal: React.FC<HeroCreationModalProps> = ({
 
             <button
               type="button"
-              onClick={() => setSelectedMode("one-pager")}
+              onClick={() => setSelectedMode("report")}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
-                selectedMode === "one-pager"
+                selectedMode === "report"
                   ? "bg-zinc-800 text-white shadow-xs border border-white/[0.1]"
                   : "text-zinc-400 hover:text-zinc-200"
               }`}
             >
               <FileCode className="w-3.5 h-3.5 text-violet-400" />
-              <span>One-Pager</span>
+              <span>Executive Report</span>
             </button>
           </div>
 
